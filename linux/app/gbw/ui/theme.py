@@ -1,0 +1,16 @@
+COLORS = {
+    "nav": ("#172033", "#111827"),
+    "nav_hover": ("#24324D", "#24324D"),
+    "nav_section": ("#DDE9F8", "#243B5A"),
+    "nav_section_text": ("#17345C", "#FFFFFF"),
+    "nav_section_line": ("#5A85BD", "#5B8FD6"),
+    "accent": ("#2563EB", "#3B82F6"),
+    "success": ("#15803D", "#22C55E"),
+    "warning": ("#B45309", "#F59E0B"),
+    "danger": ("#B91C1C", "#EF4444"),
+    "card": ("#F4F6F8", "#1F2937"),
+    "card_alt": ("#E9EEF5", "#263244"),
+    "muted": ("#586174", "#A8B1C2"),
+    "text": ("#111827", "#F3F4F6"),
+    "border": ("#D5DBE5", "#374151"),
+}
