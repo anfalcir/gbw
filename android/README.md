@@ -6,7 +6,7 @@ Reimplementação Android nativa do Guitar Backing Wizard, tendo **GBW Linux 5.2
 
 Versão de desenvolvimento: `6.0.0-alpha1`.
 
-A árvore Android já contém domínio portado e infraestrutura inicial, mas ainda é **pré-homologação**: os gates de DSP/ML nativo e o build completo em CI precisam ser fechados antes de tratá-la como APK funcional equivalente ao desktop.
+O primeiro checkpoint Android já possui **CI verde com APK debug gerado automaticamente**. A linha ainda é pré-homologação porque os gates de DSP/ML nativo e a paridade funcional completa com o desktop seguem em desenvolvimento.
 
 ## Stack fixada
 
@@ -15,7 +15,7 @@ A árvore Android já contém domínio portado e infraestrutura inicial, mas ain
 - Gradle `9.6.0`.
 - JDK `17`.
 - Jetpack Compose BOM `2026.08.00`.
-- `compileSdk 36`, `targetSdk 36`, `minSdk 28`.
+- `compileSdk 37`, `targetSdk 36`, `minSdk 28`.
 - Storage Access Framework para arquivos do usuário.
 - Foreground Service `mediaProcessing` para tarefas longas.
 - FFmpegKit mantido temporariamente para inspeção/codec enquanto a camada de mídia é consolidada.
@@ -48,12 +48,19 @@ Resultado esperado: `DOMAIN_SMOKE_OK`.
 
 Todo commit/push dispara automaticamente **Android CI**. O workflow executa:
 
-1. testes unitários;
-2. Android Lint;
-3. `assembleDebug`;
-4. SHA-256 do APK;
-5. publicação do APK debug e relatórios como artifacts.
+1. smoke/paridade de domínio;
+2. testes unitários Android;
+3. Android Lint;
+4. `assembleDebug`;
+5. SHA-256/metadata do APK;
+6. publicação do APK debug e relatórios como artifacts.
 
-O artifact debug é instalável diretamente para homologações técnicas. Release assinado definitivo terá gate próprio quando a arquitetura/DSP estiverem maduros.
+O artifact debug é instalável diretamente para homologações técnicas. Release assinado definitivo terá gate próprio quando arquitetura, DSP e ML estiverem maduros.
 
-Consulte `../docs/CURRENT_STATE.md` e `../docs/ANDROID_MIGRATION_PLAN.md` antes de alterar decisões estruturais.
+## Desenvolvimento
+
+- referência consolidada: `main`;
+- branch oficial Android: `dev/android-6.0`;
+- após cada commit, a sessão deve acompanhar a CI autonomamente e corrigir qualquer gate vermelho antes de avançar.
+
+Consulte `../docs/CURRENT_STATE.md`, `../docs/ANDROID_MIGRATION_PLAN.md` e `../docs/ANDROID_HANDOFF_PROMPT.md` antes de alterar decisões estruturais.
