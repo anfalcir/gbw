@@ -7,7 +7,7 @@
 
 ## Organização
 
-- `linux/` — âncora imutável do baseline Linux 5.23 e fonte de verdade funcional por identidade/versionamento.
+- `linux/` — distribuição operacional congelada do baseline Linux 5.23 e fonte de verdade funcional.
 - `android/` — aplicação Android nativa ativa, linha 6.x.
 - `docs/` — contratos, roadmap, paridade, CI e handoff.
 - `.github/workflows/` — automação CI.
@@ -15,9 +15,11 @@
 ## Linux
 
 - Baseline congelado: **GBW Linux 5.23.0**.
-- Pacote autoritativo: `Guitar_Backing_Wizard_v5.23_Linux.zip`.
-- SHA-256: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`.
-- O pacote não é presumido como armazenado no Git; qualquer cópia usada para inspeção precisa bater com a hash acima.
+- Pacote de origem validado: `Guitar_Backing_Wizard_v5.23_Linux.zip`.
+- SHA-256 do pacote de origem: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`.
+- `linux/app/` preserva a distribuição completa expandida diretamente desse pacote.
+- `linux/MANIFEST.sha256` fixa a integridade byte-a-byte de todos os arquivos preservados.
+- Baixar `linux/` é suficiente para instalar, validar e executar a v5.23; o ZIP original não é necessário para uso.
 - A referência Linux permanece imutável durante a migração Android salvo decisão explícita de nova baseline.
 
 ## Android
@@ -109,7 +111,7 @@ Regras consolidadas:
 
 A CI Android é automática em todo push/PR e mantém `workflow_dispatch` apenas como contingência.
 
-Gates atuais:
+Gates Android atuais:
 
 1. paridade/smoke de domínio;
 2. golden host Rubber Band R3 (+3/-3, estéreo, duração);
@@ -121,6 +123,18 @@ Gates atuais:
 8. upload do APK debug;
 9. upload dos relatórios.
 
+A Linux Baseline CI valida, quando o baseline/paridade muda:
+
+1. identidade da baseline e manifesto;
+2. integridade SHA-256 de toda a árvore `linux/app/`;
+3. ausência de ZIP de staging na distribuição canônica;
+4. permissões executáveis dos entrypoints/scripts;
+5. sintaxe Bash;
+6. `compileall` Python;
+7. testes core e pipeline de áudio com FFmpeg;
+8. testes GUI sob Xvfb;
+9. self-test da aplicação.
+
 Checkpoint consolidado do bloco R3/Pitch de Arquivo:
 
 - commit funcional: `55f5e5e12becff31bc38028cceabca855348bf92`;
@@ -128,7 +142,7 @@ Checkpoint consolidado do bloco R3/Pitch de Arquivo:
 - artifact APK: `GBW-Android-debug-14`;
 - digest do artifact: `sha256:e682578df12d3826fcc317cdf94868d52d85666effdc46cdd7a75903b53fbe76`.
 
-O agente deve acompanhar run/jobs/logs/artifacts autonomamente após todo commit relevante e corrigir a causa real de qualquer falha.
+Esse checkpoint é histórico do gate funcional Android; o HEAD de `main` pode avançar por documentação, preservação Linux ou housekeeping sem invalidá-lo.
 
 ## O que ainda NÃO está homologado
 

@@ -1,14 +1,16 @@
 # Guitar Backing Wizard (GBW)
 
-Repositório oficial do **Guitar Backing Wizard**, organizado por plataforma para preservar o baseline Linux e desenvolver a linha Android nativa com rastreabilidade.
+Repositório oficial do **Guitar Backing Wizard**, organizado por plataforma para preservar integralmente o baseline Linux e desenvolver a linha Android nativa com rastreabilidade.
 
 ## Estrutura
 
 ```text
 gbw/
-├── linux/                  # âncora imutável do GBW Linux 5.23
+├── linux/                  # distribuição operacional congelada do GBW Linux 5.23
+│   ├── app/                # sistema Linux completo, expandido e pronto para instalar/usar
 │   ├── BASELINE.md         # identidade, versão e SHA-256 autoritativos
-│   └── README.md           # política do baseline Linux
+│   ├── MANIFEST.sha256     # integridade byte-a-byte da árvore expandida
+│   └── README.md           # uso e política de preservação
 ├── android/                # aplicação Android nativa — linha 6.x
 │   ├── app/                # módulo Android
 │   ├── scripts/
@@ -22,10 +24,12 @@ gbw/
 
 O comportamento de referência é **GBW Linux 5.23.0**.
 
-- Pacote autoritativo: `Guitar_Backing_Wizard_v5.23_Linux.zip`
-- SHA-256: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`
-- `linux/BASELINE.md` registra formalmente essa identidade.
-- O pacote binário/fonte empacotado **não é presumido como presente no Git**; quando for necessário inspecioná-lo, deve-se usar uma cópia que bata exatamente com o SHA-256 acima.
+- Pacote de origem validado: `Guitar_Backing_Wizard_v5.23_Linux.zip`
+- SHA-256 do pacote de origem: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`
+- `linux/app/` contém a distribuição completa expandida diretamente desse pacote autoritativo.
+- `linux/MANIFEST.sha256` fixa a integridade de cada arquivo preservado.
+- `linux/BASELINE.md` registra formalmente a identidade e a regra de congelamento.
+- Baixar `linux/` é suficiente para preservar, instalar, validar e executar a versão Linux 5.23; o ZIP original não é necessário para uso.
 - O desenvolvimento Android não altera o baseline Linux como efeito colateral.
 
 ## Android
@@ -44,7 +48,7 @@ Stack e decisões consolidadas:
 - Alta qualidade / BS-RoFormer preservada como opção;
 - Rubber Band R3 via NDK/JNI já integrado no checkpoint atual;
 - Pitch de Arquivo como primeiro fluxo DSP ponta a ponta;
-- projetos/backups preparados para interoperabilidade Linux ↔ Android;
+- arquitetura de projetos/backups preparada para interoperabilidade Linux ↔ Android, com implementação completa ainda sujeita aos gates do roadmap;
 - produto final sem Termux ou Python externo.
 
 ## Branches
@@ -62,6 +66,8 @@ A CI Android é **100% automática por commit/push em qualquer branch**:
 - o agente deve consultar autonomamente run, jobs, logs e artifacts;
 - gates atuais: smoke de domínio, golden Rubber Band R3, unit tests, Android Lint, `assembleDebug`, verificação nativa do APK, metadata/SHA-256 e artifacts;
 - `workflow_dispatch` é apenas contingência, não o fluxo normal.
+
+A Linux Baseline CI roda quando `linux/**`, `docs/PARITY_MATRIX.md` ou o próprio workflow Linux mudam e valida identidade, manifesto, permissões, sintaxe, compilação Python, testes e self-test da distribuição congelada.
 
 Novos chats devem sempre confirmar o HEAD e o run mais recente antes de escrever.
 

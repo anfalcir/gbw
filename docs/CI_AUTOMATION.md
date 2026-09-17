@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Permitir que uma sessão do ChatGPT faça o ciclo completo de desenvolvimento Android sem depender de ações manuais do usuário:
+Permitir que uma sessão do ChatGPT faça o ciclo completo de desenvolvimento Android sem depender de ações manuais do usuário e manter a baseline Linux verificável automaticamente.
 
 ```text
 confirmar HEAD
@@ -27,12 +27,14 @@ Também roda em Pull Requests. `workflow_dispatch` é apenas contingência; não
 Gates obrigatórios:
 
 1. smoke/paridade de domínio;
-2. testes unitários Android;
-3. Android Lint;
-4. `assembleDebug`;
-5. SHA-256 do APK;
-6. artifact com APK + metadata;
-7. relatórios de testes/lint quando disponíveis.
+2. golden Rubber Band R3 host;
+3. testes unitários Android;
+4. Android Lint;
+5. `assembleDebug`;
+6. verificação da biblioteca nativa no APK;
+7. SHA-256/metadata do APK;
+8. artifact com APK;
+9. relatórios de testes/lint quando disponíveis.
 
 Não usar `continue-on-error` nos gates acima.
 
@@ -49,8 +51,23 @@ Após um commit:
 7. quando verde, consultar/download do artifact APK;
 8. registrar SHA-256 e atualizar `docs/CURRENT_STATE.md` se o gate mudou.
 
-## Linux CI
+## Linux Baseline CI
 
 Workflow: `.github/workflows/linux-ci.yml`.
 
-Roda automaticamente quando `linux/**` ou o próprio workflow Linux muda. O baseline Linux é congelado, portanto esse workflow normalmente será pouco acionado.
+Roda automaticamente quando `linux/**`, `docs/PARITY_MATRIX.md` ou o próprio workflow Linux muda.
+
+Gates obrigatórios:
+
+1. presença de `linux/README.md`, `linux/BASELINE.md` e `linux/MANIFEST.sha256`;
+2. identidade `5.23.0` e SHA-256 do pacote de origem;
+3. `sha256sum -c linux/MANIFEST.sha256` sobre toda a distribuição expandida;
+4. ausência de ZIP de staging em `linux/app/`;
+5. permissões executáveis dos scripts/entrypoints;
+6. `bash -n` nos scripts shell;
+7. `python -m compileall`;
+8. testes `test_core` e `test_audio_pipeline` com FFmpeg;
+9. `test_gui_smoke` em Xvfb;
+10. self-test da aplicação em Xvfb.
+
+A Linux CI não instala Demucs ou BS-RoFormer completos apenas para validar o baseline: esses componentes pesados são testados por interfaces/mocks onde apropriado; o objetivo deste workflow é provar preservação, importabilidade e regressão funcional do pacote congelado sem transformar a CI em download de modelos/pesos.

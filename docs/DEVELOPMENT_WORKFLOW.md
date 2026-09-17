@@ -42,22 +42,34 @@ Trigger automático: todo `push` em qualquer branch e todo Pull Request.
 
 Gates obrigatórios:
 
+- smoke/paridade de domínio;
+- golden host Rubber Band R3;
 - testes unitários;
 - lint;
 - assemble debug;
-- hash SHA-256;
+- verificação nativa do APK;
+- hash/metadata SHA-256;
 - upload do APK;
 - upload de relatórios mesmo em falha, quando produzidos.
 
-## Linux CI
+## Linux Baseline CI
 
-Trigger automático: alterações em `linux/**` ou no workflow Linux.
+Trigger automático: alterações em `linux/**`, `docs/PARITY_MATRIX.md` ou no workflow Linux.
 
 Gates:
 
+- identidade `5.23.0` e SHA do pacote de origem;
+- `linux/MANIFEST.sha256` e verificação integral da árvore expandida;
+- ausência do ZIP de staging em `linux/app/`;
+- permissões executáveis de `install.sh`, `run.sh`, `criar_atalho.sh`, `validate_local.sh`, `guitar_backing_wizard.py` e `audio_intelligence.py`;
 - sintaxe Bash;
-- compileall Python;
-- testes unitários/core e GUI em Xvfb com dependências mínimas apropriadas.
+- `compileall` Python;
+- testes unitários/core;
+- testes do pipeline de áudio com FFmpeg;
+- testes GUI em Xvfb;
+- self-test da aplicação em Xvfb.
+
+O workflow instala apenas dependências mínimas necessárias à validação. Modelos ML pesados/venvs persistentes não entram no Git nem são tratados como parte da integridade byte-a-byte da distribuição.
 
 ## Segurança
 

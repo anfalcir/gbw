@@ -10,6 +10,7 @@ Baixar a pasta `linux/` é suficiente para preservar, instalar, validar e execut
 
 - `app/` — distribuição Linux completa e pronta para uso.
 - `BASELINE.md` — identidade e contrato do baseline congelado.
+- `MANIFEST.sha256` — hashes SHA-256 de todos os arquivos preservados em `app/`.
 
 Dentro de `app/` ficam o código-fonte completo, assets, testes, documentação, `requirements.txt`, `install.sh`, `run.sh`, `criar_atalho.sh` e `validate_local.sh`.
 
@@ -26,10 +27,17 @@ Depois, para executar diretamente da pasta:
 ./run.sh
 ```
 
-Para validar a distribuição:
+Para validar a distribuição local:
 
 ```bash
 ./validate_local.sh
+```
+
+Para validar a integridade byte-a-byte da cópia preservada:
+
+```bash
+cd linux
+sha256sum -c MANIFEST.sha256
 ```
 
 ## Identidade
@@ -40,4 +48,4 @@ SHA-256 do pacote original validado e usado para materializar esta árvore:
 
 `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`
 
-A árvore expandida em `linux/app/` é a forma canônica de preservação no repositório. O ZIP original não é necessário para instalar ou executar o sistema.
+A árvore expandida em `linux/app/` é a forma canônica de preservação no repositório. O ZIP original não é necessário para instalar ou executar o sistema. Qualquer divergência no manifesto significa que a cópia deixou de ser byte-a-byte equivalente à baseline materializada.

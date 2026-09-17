@@ -22,18 +22,91 @@ concurrency:
 
 jobs:
   validate-baseline:
-    name: Validate frozen Linux baseline metadata
+    name: Validate frozen Linux 5.23 distribution
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Validate baseline identity
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: linux/app/requirements.txt
+
+      - name: Install validation dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg xvfb python3-tk
+          python -m pip install --upgrade pip
+          python -m pip install customtkinter 'yt-dlp[default,curl-cffi]' 'librosa>=0.11'
+
+      - name: Validate baseline identity and tree integrity
         shell: bash
         run: |
           set -euo pipefail
           test -f linux/BASELINE.md
           test -f linux/README.md
-          test -f docs/PARITY_MATRIX.md
+          test -f linux/MANIFEST.sha256
           grep -Fq '5.23.0' linux/BASELINE.md
           grep -Fq 'ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a' linux/BASELINE.md
-          echo 'GBW Linux 5.23 baseline metadata: OK'
+          test ! -e linux/app/Guitar_Backing_Wizard_v5.23_Linux.zip
+          cd linux
+          sha256sum -c MANIFEST.sha256
+
+      - name: Validate executable entrypoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            linux/app/install.sh \
+            linux/app/run.sh \
+            linux/app/criar_atalho.sh \
+            linux/app/validate_local.sh \
+            linux/app/guitar_backing_wizard.py \
+            linux/app/audio_intelligence.py; do
+            test -x "$file"
+          done
+
+      - name: Validate Bash syntax
+        working-directory: linux/app
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install.sh
+          bash -n run.sh
+          bash -n criar_atalho.sh
+          bash -n validate_local.sh
+
+      - name: Compile Python sources
+        working-directory: linux/app
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q gbw guitar_backing_wizard.py audio_intelligence.py tests
+
+      - name: Core and audio pipeline tests
+        working-directory: linux/app
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m unittest tests.test_core tests.test_audio_pipeline -v
+
+      - name: GUI smoke tests under Xvfb
+        working-directory: linux/app
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s xvfb-run -a env GBW_HEADLESS_TEST=1 PYTHONPATH=. python -m unittest tests.test_gui_smoke -v
+
+      - name: Application self-test under Xvfb
+        working-directory: linux/app
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 60s xvfb-run -a env PYTHONPATH=. python guitar_backing_wizard.py --self-test
