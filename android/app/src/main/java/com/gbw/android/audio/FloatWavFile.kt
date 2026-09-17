@@ -151,6 +151,30 @@ class FloatWavWriter(
         framesWritten += interleaved.size / channels
     }
 
+    /**
+     * Writes caller-owned little-endian float32 bytes without materializing a
+     * FloatArray. The source position is not modified.
+     */
+    fun write(interleavedFloat32: ByteBuffer, frames: Int) {
+        require(frames >= 0)
+        if (frames == 0) return
+        require(interleavedFloat32.order() == ByteOrder.LITTLE_ENDIAN) {
+            "WAV float32 bytes must be little-endian"
+        }
+        val sampleCount = Math.multiplyExact(frames, channels)
+        val byteCount = Math.multiplyExact(sampleCount, 4)
+        val source = interleavedFloat32.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        require(source.remaining() >= byteCount) {
+            "Direct WAV source has " + source.remaining() +
+                " bytes; expected at least " + byteCount
+        }
+        source.limit(source.position() + byteCount)
+        while (source.hasRemaining()) {
+            output.channel.write(source)
+        }
+        framesWritten += frames.toLong()
+    }
+
     override fun close() {
         val dataBytes = Math.multiplyExact(Math.multiplyExact(framesWritten, channels.toLong()), 4L)
         require(dataBytes <= 0xffff_ffffL) { "WAV RIFF excede 4 GiB; RF64 ainda não está habilitado" }
