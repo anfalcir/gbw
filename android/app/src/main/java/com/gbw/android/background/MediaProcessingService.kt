@@ -5,14 +5,21 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.gbw.android.MainActivity
 import com.gbw.android.R
+import com.gbw.android.audio.FilePitchRenderRequest
+import com.gbw.android.audio.FilePitchRenderer
+import com.gbw.android.domain.AudioKind
+import com.gbw.android.domain.OutputFormat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,8 +45,94 @@ class MediaProcessingService : Service() {
         when (intent?.action) {
             ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
             ACTION_SELF_TEST -> startSelfTest()
+            ACTION_FILE_PITCH -> startFilePitch(intent)
         }
         return START_NOT_STICKY
+    }
+
+    private fun startFilePitch(intent: Intent) {
+        if (activeJob?.isActive == true) return
+        val input = intent.getStringExtra(EXTRA_INPUT_URI)?.let(Uri::parse)
+        val output = intent.getStringExtra(EXTRA_OUTPUT_URI)?.let(Uri::parse)
+        val semitones = intent.getIntExtra(EXTRA_SEMITONES, Int.MIN_VALUE)
+        val audioKind = intent.getStringExtra(EXTRA_AUDIO_KIND)?.let {
+            runCatching { AudioKind.valueOf(it) }.getOrNull()
+        }
+        val outputFormat = intent.getStringExtra(EXTRA_OUTPUT_FORMAT)?.let {
+            runCatching { OutputFormat.valueOf(it) }.getOrNull()
+        }
+        if (input == null || output == null || semitones == Int.MIN_VALUE || audioKind == null || outputFormat == null) {
+            val invalid = PersistedJob(
+                id = UUID.randomUUID().toString(),
+                type = "file-pitch",
+                label = "Pitch de Arquivo",
+                state = "ERROR",
+                progress = 0,
+                startedAt = System.currentTimeMillis(),
+                message = "Parâmetros inválidos para iniciar o processamento.",
+            )
+            store.save(invalid)
+            stopSelf()
+            return
+        }
+
+        val persisted = PersistedJob(
+            id = intent.getStringExtra(EXTRA_JOB_ID) ?: UUID.randomUUID().toString(),
+            type = "file-pitch",
+            label = "Pitch de Arquivo",
+            state = "RUNNING",
+            progress = 0,
+            startedAt = System.currentTimeMillis(),
+            message = "Iniciando processamento…",
+        )
+        store.save(persisted)
+        startAsForeground(notification(persisted))
+        val request = FilePitchRenderRequest(
+            inputUri = input,
+            outputUri = output,
+            semitones = semitones,
+            audioKind = audioKind,
+            outputFormat = outputFormat,
+            cautionAccepted = intent.getBooleanExtra(EXTRA_CAUTION_ACCEPTED, false),
+            jobId = persisted.id,
+        )
+
+        activeJob = scope.launch {
+            try {
+                val result = FilePitchRenderer.render(this@MediaProcessingService, request) { progress, message ->
+                    updateJob(persisted, progress, message)
+                }
+                val message = "Concluído • ${result.sampleRate} Hz • ${result.channels} canal(is) • ${result.rubberBandIdentity}"
+                val success = persisted.copy(state = "SUCCESS", progress = 100, message = message)
+                store.save(success)
+                notificationManager().notify(NOTIFICATION_ID, notification(success))
+            } catch (cancelled: CancellationException) {
+                val current = store.load()
+                if (current?.state == "RUNNING") {
+                    store.save(current.copy(state = "CANCELLED", message = "Processamento cancelado com cleanup concluído."))
+                }
+            } catch (error: Exception) {
+                val failed = persisted.copy(
+                    state = "ERROR",
+                    message = error.message ?: "Falha inesperada no Pitch de Arquivo.",
+                )
+                store.save(failed)
+                notificationManager().notify(NOTIFICATION_ID, notification(failed))
+            } finally {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }
+    }
+
+    private fun updateJob(base: PersistedJob, progress: Int, message: String) {
+        val next = base.copy(
+            state = "RUNNING",
+            progress = progress.coerceIn(0, 100),
+            message = message,
+        )
+        store.save(next)
+        notificationManager().notify(NOTIFICATION_ID, notification(next))
     }
 
     private fun startSelfTest() {
@@ -73,9 +166,11 @@ class MediaProcessingService : Service() {
     }
 
     private fun cancelCurrent(message: String) {
-        activeJob?.cancel()
         val current = store.load()
-        if (current != null) store.save(current.copy(state = "CANCELLED", message = message))
+        if (current != null && current.state == "RUNNING") {
+            store.save(current.copy(state = "CANCELLED", message = message))
+        }
+        activeJob?.cancel(CancellationException(message))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -95,8 +190,10 @@ class MediaProcessingService : Service() {
 
     override fun onTimeout(startId: Int, fgsType: Int) {
         val current = store.load()
-        if (current != null) store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
-        activeJob?.cancel()
+        if (current != null) {
+            store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
+        }
+        activeJob?.cancel(CancellationException("Foreground service timeout"))
         stopSelf(startId)
     }
 
@@ -113,7 +210,9 @@ class MediaProcessingService : Service() {
             .setOnlyAlertOnce(true)
             .setOngoing(job.state == "RUNNING")
             .setContentIntent(openPending)
-            .addAction(0, "Cancelar", cancelPending)
+            .apply {
+                if (job.state == "RUNNING") addAction(0, "Cancelar", cancelPending)
+            }
             .build()
     }
 
@@ -138,7 +237,36 @@ class MediaProcessingService : Service() {
     companion object {
         const val ACTION_SELF_TEST = "com.gbw.android.action.BACKGROUND_SELF_TEST"
         const val ACTION_CANCEL = "com.gbw.android.action.CANCEL_MEDIA_JOB"
+        const val ACTION_FILE_PITCH = "com.gbw.android.action.FILE_PITCH"
+
+        private const val EXTRA_INPUT_URI = "input_uri"
+        private const val EXTRA_OUTPUT_URI = "output_uri"
+        private const val EXTRA_SEMITONES = "semitones"
+        private const val EXTRA_AUDIO_KIND = "audio_kind"
+        private const val EXTRA_OUTPUT_FORMAT = "output_format"
+        private const val EXTRA_CAUTION_ACCEPTED = "caution_accepted"
+        private const val EXTRA_JOB_ID = "job_id"
+
         private const val CHANNEL_ID = "gbw_media_processing"
         private const val NOTIFICATION_ID = 2301
+
+        fun filePitchIntent(
+            context: Context,
+            inputUri: Uri,
+            outputUri: Uri,
+            semitones: Int,
+            audioKind: AudioKind,
+            outputFormat: OutputFormat,
+            cautionAccepted: Boolean,
+            jobId: String = UUID.randomUUID().toString(),
+        ): Intent = Intent(context, MediaProcessingService::class.java)
+            .setAction(ACTION_FILE_PITCH)
+            .putExtra(EXTRA_INPUT_URI, inputUri.toString())
+            .putExtra(EXTRA_OUTPUT_URI, outputUri.toString())
+            .putExtra(EXTRA_SEMITONES, semitones)
+            .putExtra(EXTRA_AUDIO_KIND, audioKind.name)
+            .putExtra(EXTRA_OUTPUT_FORMAT, outputFormat.name)
+            .putExtra(EXTRA_CAUTION_ACCEPTED, cautionAccepted)
+            .putExtra(EXTRA_JOB_ID, jobId)
     }
 }
