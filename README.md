@@ -8,6 +8,7 @@ Repositório oficial do **Guitar Backing Wizard**, organizado por plataforma par
 gbw/
 ├── linux/                  # distribuição operacional congelada do GBW Linux 5.23
 │   ├── app/                # sistema Linux completo, expandido e pronto para instalar/usar
+│   ├── ci/                 # validadores de CI; não altera a baseline congelada
 │   ├── BASELINE.md         # identidade, versão e SHA-256 autoritativos
 │   ├── MANIFEST.sha256     # integridade byte-a-byte da árvore expandida
 │   └── README.md           # uso e política de preservação

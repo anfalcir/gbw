@@ -6,6 +6,7 @@ O repositório separa a distribuição Linux congelada da implementação Androi
 /
 ├── linux/
 │   ├── app/              # distribuição operacional completa do Linux 5.23
+│   ├── ci/               # validadores de CI fora da baseline congelada
 │   ├── BASELINE.md       # identidade/contrato da baseline
 │   ├── MANIFEST.sha256   # integridade byte-a-byte da árvore expandida
 │   └── README.md         # uso e preservação
@@ -17,7 +18,8 @@ O repositório separa a distribuição Linux congelada da implementação Androi
 
 ## Regras de fronteira
 
-- `linux/**` preserva o baseline congelado completo e não é alterado como efeito colateral do Android.
+- `linux/app/**` preserva o baseline congelado completo e não é alterado como efeito colateral do Android.
+- `linux/ci/**` contém apenas validadores de repositório/CI e fica deliberadamente fora do manifesto byte-a-byte da aplicação congelada.
 - Código Android permanece em `android/**`.
 - Contratos cross-platform ficam em `docs/**`.
 - Artefatos de usuário, projetos, músicas, modelos grandes, caches, venvs, build outputs e keystores privados nunca entram no Git.
