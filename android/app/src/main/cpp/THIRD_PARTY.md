@@ -64,6 +64,24 @@ The runtime downloads to a `.part` file in private app storage, validates size a
 The public Hugging Face dataset card declares **MIT** metadata and documents the upstream Demucs weight origins used for the converted ggml files. That is useful provenance evidence, but the project will still keep pretrained-weight provenance/licence review as an explicit RC audit item rather than inferring that runtime functionality alone clears every redistribution obligation. Keeping the model outside the APK reduces coupling between application distribution and model delivery.
 
 
+
+## ExecuTorch runtime
+
+GBW Android uses ExecuTorch for the real-valued BS-RoFormer transformer/mask
+core. Spectral DSP stays in the separately pinned PFFFT JNI boundary.
+
+- Component: ExecuTorch Android
+- Maven coordinate: org.pytorch:executorch-android:1.3.1
+- Export/runtime version: 1.3.1
+- Initial backend: XNNPACK / CPU
+- Initial ABI consumed by GBW: arm64-v8a
+- Upstream licence: BSD License at the 1.3.1 release
+
+The generic Module Java/Kotlin API is experimental upstream. GBW therefore
+keeps it behind BsRoformerExecuTorch and validates tensor dtype/shape on every
+forward boundary. Large tensors use direct FloatBuffer input and a reusable
+caller-owned FloatBuffer output rather than per-chunk float arrays.
+
 ## PFFFT — BS-RoFormer spectral DSP
 
 GBW Android uses PFFFT for the native STFT/ISTFT boundary around the

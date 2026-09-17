@@ -70,7 +70,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     // Audio-only maintained FFmpegKit fork. Pinned; no dynamic versions.
-    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:8.1.7")
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:8.1.7")\n\n    // Exact runtime used by the pinned BS-RoFormer export toolchain.\n    implementation("org.pytorch:executorch-android:1.3.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
