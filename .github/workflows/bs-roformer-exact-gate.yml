@@ -17,8 +17,6 @@ env:
   BSR_MODEL_REV: a443a2985534b3bc815ef54a5d446c6a0390f974
   BSR_CKPT_SHA256: 24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e
   BSR_CKPT_BYTES: '699412152'
-  BSR_CONFIG_SHA256: f9fada9f94e5ba2d2e4600196299459294bc5f532b314c209cc156ac63e4329b
-  BSR_CONFIG_BYTES: '4613'
 
 jobs:
   exact-gate:
@@ -30,30 +28,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache verified BS-RoFormer assets
+      - name: Cache verified BS-RoFormer checkpoint
         uses: actions/cache@v4
         with:
           path: ${{ env.BSR_CACHE_DIR }}
-          key: bsr-sw-${{ env.BSR_CKPT_SHA256 }}-${{ env.BSR_CONFIG_SHA256 }}
+          key: bsr-sw-${{ env.BSR_CKPT_SHA256 }}
 
-      - name: Download and verify exact model assets
+      - name: Download and verify exact checkpoint
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$BSR_CACHE_DIR"
           ckpt="$BSR_CACHE_DIR/BS-Rofo-SW-Fixed.ckpt"
-          config="$BSR_CACHE_DIR/BS-Rofo-SW-Fixed.yaml"
           base="https://huggingface.co/enerjazzer/BS-ROFO-SW-Fixed/resolve/$BSR_MODEL_REV"
 
           verify_ckpt() {
             [[ -f "$ckpt" ]] &&
             [[ "$(stat -c%s "$ckpt")" == "$BSR_CKPT_BYTES" ]] &&
             echo "$BSR_CKPT_SHA256  $ckpt" | sha256sum -c -
-          }
-          verify_config() {
-            [[ -f "$config" ]] &&
-            [[ "$(stat -c%s "$config")" == "$BSR_CONFIG_BYTES" ]] &&
-            echo "$BSR_CONFIG_SHA256  $config" | sha256sum -c -
           }
 
           if ! verify_ckpt; then
@@ -65,19 +57,7 @@ jobs:
             echo "$BSR_CKPT_SHA256  $ckpt.part" | sha256sum -c -
             mv "$ckpt.part" "$ckpt"
           fi
-
-          if ! verify_config; then
-            rm -f "$config" "$config.part"
-            curl --fail --location --retry 5 --retry-delay 2 \
-              "$base/BS-Rofo-SW-Fixed.yaml?download=true" \
-              -o "$config.part"
-            [[ "$(stat -c%s "$config.part")" == "$BSR_CONFIG_BYTES" ]]
-            echo "$BSR_CONFIG_SHA256  $config.part" | sha256sum -c -
-            mv "$config.part" "$config"
-          fi
-
           verify_ckpt
-          verify_config
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
@@ -100,8 +80,7 @@ jobs:
         shell: bash
         run: |
           python tools/bs_roformer_exact_gate.py \
-            --checkpoint "$BSR_CACHE_DIR/BS-Rofo-SW-Fixed.ckpt" \
-            --config "$BSR_CACHE_DIR/BS-Rofo-SW-Fixed.yaml"
+            --checkpoint "$BSR_CACHE_DIR/BS-Rofo-SW-Fixed.ckpt"
 
       - name: Publish exact gate summary
         if: always()
