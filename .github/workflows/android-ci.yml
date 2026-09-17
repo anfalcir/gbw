@@ -60,6 +60,10 @@ jobs:
         working-directory: android
         run: bash scripts/validate_domain.sh
 
+      - name: Rubber Band R3 host golden smoke
+        working-directory: android
+        run: bash scripts/validate_rubberband_host.sh
+
       - name: Unit tests
         working-directory: android
         run: gradle --no-daemon --stacktrace testDebugUnitTest
