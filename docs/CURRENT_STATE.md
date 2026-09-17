@@ -7,7 +7,7 @@
 
 ## Organização
 
-- `linux/` — baseline Linux 5.23 congelado e fonte de verdade funcional.
+- `linux/` — âncora imutável do baseline Linux 5.23 e fonte de verdade funcional por identidade/versionamento.
 - `android/` — aplicação Android nativa ativa, linha 6.x.
 - `docs/` — contratos, roadmap, paridade, CI e handoff.
 - `.github/workflows/` — automação CI.
@@ -17,6 +17,7 @@
 - Baseline congelado: **GBW Linux 5.23.0**.
 - Pacote autoritativo: `Guitar_Backing_Wizard_v5.23_Linux.zip`.
 - SHA-256: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`.
+- O pacote não é presumido como armazenado no Git; qualquer cópia usada para inspeção precisa bater com a hash acima.
 - A referência Linux permanece imutável durante a migração Android salvo decisão explícita de nova baseline.
 
 ## Android
@@ -119,6 +120,13 @@ Gates atuais:
 7. metadata/SHA-256;
 8. upload do APK debug;
 9. upload dos relatórios.
+
+Checkpoint consolidado do bloco R3/Pitch de Arquivo:
+
+- commit funcional: `55f5e5e12becff31bc38028cceabca855348bf92`;
+- Android CI em `main`: run `#14`, **SUCCESS**;
+- artifact APK: `GBW-Android-debug-14`;
+- digest do artifact: `sha256:e682578df12d3826fcc317cdf94868d52d85666effdc46cdd7a75903b53fbe76`.
 
 O agente deve acompanhar run/jobs/logs/artifacts autonomamente após todo commit relevante e corrigir a causa real de qualquer falha.
 
