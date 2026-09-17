@@ -64,6 +64,10 @@ jobs:
         working-directory: android
         run: bash scripts/validate_rubberband_host.sh
 
+      - name: BS-RoFormer spectral DSP host golden smoke
+        working-directory: android
+        run: bash scripts/validate_bs_roformer_spectral_host.sh
+
       - name: Cache pinned Demucs checkpoint
         uses: actions/cache@v4
         with:
