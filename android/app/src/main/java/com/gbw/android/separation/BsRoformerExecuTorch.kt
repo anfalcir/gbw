@@ -76,7 +76,12 @@ internal class BsRoformerExecuTorch private constructor(
         fun open(pteFile: File): BsRoformerExecuTorch {
             require(pteFile.isFile) { "BS-RoFormer .pte file not found" }
             require(pteFile.length() > 0L) { "BS-RoFormer .pte file is empty" }
-            return BsRoformerExecuTorch(Module.load(pteFile.absolutePath))
+            // The production PTE is ~700 MB. mmap lets the OS page the file on
+            // demand instead of eagerly copying the complete program into a
+            // private Java/native buffer at module open.
+            return BsRoformerExecuTorch(
+                Module.load(pteFile.absolutePath, Module.LOAD_MODE_MMAP)
+            )
         }
     }
 }

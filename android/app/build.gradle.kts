@@ -52,6 +52,9 @@ android {
 
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
+        // FFmpegKit and ExecuTorch/fbjni both bundle the shared Android C++
+        // runtime. Package exactly one copy instead of failing mergeNativeLibs.
+        jniLibs.pickFirsts += setOf("lib/**/libc++_shared.so")
     }
 }
 
