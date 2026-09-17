@@ -1,0 +1,146 @@
+package com.gbw.android.background
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
+import android.os.IBinder
+import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import com.gbw.android.MainActivity
+import com.gbw.android.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+class MediaProcessingService : Service() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var activeJob: Job? = null
+    private lateinit var store: JobStore
+
+    override fun onCreate() {
+        super.onCreate()
+        store = JobStore(this)
+        ensureChannel()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
+            ACTION_SELF_TEST -> startSelfTest()
+        }
+        return START_NOT_STICKY
+    }
+
+    private fun startSelfTest() {
+        if (activeJob?.isActive == true) return
+        val persisted = PersistedJob(
+            id = UUID.randomUUID().toString(),
+            type = "background-self-test",
+            label = "Teste de execução em segundo plano",
+            state = "RUNNING",
+            progress = 0,
+            startedAt = System.currentTimeMillis(),
+            message = "Iniciando…",
+        )
+        store.save(persisted)
+        startAsForeground(notification(persisted))
+        activeJob = scope.launch {
+            try {
+                for (p in 1..100) {
+                    if (!isActive) return@launch
+                    delay(120)
+                    val next = persisted.copy(progress = p, message = "Validando persistência e notificação…")
+                    store.save(next)
+                    notificationManager().notify(NOTIFICATION_ID, notification(next))
+                }
+                store.save(persisted.copy(state = "SUCCESS", progress = 100, message = "Teste concluído"))
+            } finally {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }
+    }
+
+    private fun cancelCurrent(message: String) {
+        activeJob?.cancel()
+        val current = store.load()
+        if (current != null) store.save(current.copy(state = "CANCELLED", message = message))
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun startAsForeground(notification: Notification) {
+        if (Build.VERSION.SDK_INT >= 35) {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING,
+            )
+        } else {
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, 0)
+        }
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        val current = store.load()
+        if (current != null) {
+            store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
+        }
+        activeJob?.cancel()
+        stopSelf(startId)
+    }
+
+    private fun notification(job: PersistedJob): Notification {
+        val openIntent = Intent(this, MainActivity::class.java)
+        val openPending = PendingIntent.getActivity(this, 1, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val cancelIntent = Intent(this, MediaProcessingService::class.java).setAction(ACTION_CANCEL)
+        val cancelPending = PendingIntent.getService(this, 2, cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_gbw)
+            .setContentTitle("GBW — ${job.label}")
+            .setContentText(job.message)
+            .setProgress(100, job.progress.coerceIn(0, 100), false)
+            .setOnlyAlertOnce(true)
+            .setOngoing(job.state == "RUNNING")
+            .setContentIntent(openPending)
+            .addAction(0, "Cancelar", cancelPending)
+            .build()
+    }
+
+    private fun ensureChannel() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            val channel = NotificationChannel(CHANNEL_ID, "Processamento de áudio", NotificationManager.IMPORTANCE_LOW)
+            channel.description = "Tarefas longas do Guitar Backing Wizard"
+            notificationManager().createNotificationChannel(channel)
+        }
+    }
+
+    private fun notificationManager() = getSystemService(NotificationManager::class.java)
+
+    override fun onDestroy() {
+        activeJob?.cancel()
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        const val ACTION_SELF_TEST = "com.gbw.android.action.BACKGROUND_SELF_TEST"
+        const val ACTION_CANCEL = "com.gbw.android.action.CANCEL_MEDIA_JOB"
+        private const val CHANNEL_ID = "gbw_media_processing"
+        private const val NOTIFICATION_ID = 2301
+    }
+}
