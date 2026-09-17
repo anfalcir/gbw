@@ -10,15 +10,10 @@ import java.nio.ByteOrder
  * storage without creating 100+ MiB FloatArray copies for every model chunk.
  */
 internal object BsRoformerSpectralNative {
-    private const val BYTES_PER_FLOAT = 4
-
-    val stftBytes: Int = Math.multiplyExact(BsRoformerContract.INPUT_FLOATS, BYTES_PER_FLOAT)
-    val maskBytes: Int = Math.multiplyExact(BsRoformerContract.MASK_FLOATS, BYTES_PER_FLOAT)
-    val outputFloats: Int =
-        BsRoformerContract.STEM_COUNT *
-            BsRoformerContract.CHUNK_FRAMES *
-            BsRoformerContract.CHANNELS
-    val outputBytes: Int = Math.multiplyExact(outputFloats, BYTES_PER_FLOAT)
+    val stftBytes: Int = BsRoformerContract.STFT_BYTES
+    val maskBytes: Int = BsRoformerContract.MASK_BYTES
+    val outputFloats: Int = BsRoformerContract.OUTPUT_FLOATS
+    val outputBytes: Int = BsRoformerContract.OUTPUT_BYTES
 
     init {
         System.loadLibrary("gbw_bsroformer_spectral")

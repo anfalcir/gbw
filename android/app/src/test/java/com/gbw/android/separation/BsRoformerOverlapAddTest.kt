@@ -12,7 +12,7 @@ class BsRoformerOverlapAddTest {
         val totalFrames = BsRoformerContract.CHUNK_FRAMES.toLong()
         val plans = BsRoformerChunking.plan(totalFrames)
         val output = ByteBuffer
-            .allocateDirect(BsRoformerSpectralNative.outputBytes)
+            .allocateDirect(BsRoformerContract.OUTPUT_BYTES)
             .order(ByteOrder.nativeOrder())
         val floats = output.asFloatBuffer()
         while (floats.hasRemaining()) {
@@ -44,7 +44,7 @@ class BsRoformerOverlapAddTest {
         val totalFrames = 44_100L * 14L
         val plans = BsRoformerChunking.plan(totalFrames)
         val output = ByteBuffer
-            .allocateDirect(BsRoformerSpectralNative.outputBytes)
+            .allocateDirect(BsRoformerContract.OUTPUT_BYTES)
             .order(ByteOrder.nativeOrder())
 
         val framesByStem = LongArray(BsRoformerContract.STEM_COUNT)

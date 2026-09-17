@@ -22,8 +22,8 @@ internal class BsRoformerExecuTorch private constructor(
     fun forwardMasks(stft: ByteBuffer, masks: ByteBuffer) {
         require(stft.isDirect && stft.order() == ByteOrder.nativeOrder())
         require(masks.isDirect && masks.order() == ByteOrder.nativeOrder())
-        require(stft.capacity() >= BsRoformerSpectralNative.stftBytes)
-        require(masks.capacity() >= BsRoformerSpectralNative.maskBytes)
+        require(stft.capacity() >= BsRoformerContract.STFT_BYTES)
+        require(masks.capacity() >= BsRoformerContract.MASK_BYTES)
 
         stft.clear()
         val inputFloats = stft.asFloatBuffer()

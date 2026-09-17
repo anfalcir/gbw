@@ -45,7 +45,7 @@ internal class BsRoformerOverlapAdd(
         require(chunkOutput.order() == ByteOrder.nativeOrder()) {
             "BS-RoFormer chunk output must use native byte order"
         }
-        require(chunkOutput.capacity() >= BsRoformerSpectralNative.outputBytes) {
+        require(chunkOutput.capacity() >= BsRoformerContract.OUTPUT_BYTES) {
             "BS-RoFormer chunk output buffer is too small"
         }
 
