@@ -57,6 +57,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
+    // Audio-only maintained FFmpegKit fork. Pinned; no dynamic versions.
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:8.1.7")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

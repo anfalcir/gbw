@@ -1,0 +1,39 @@
+name: Linux Baseline CI
+
+on:
+  push:
+    paths:
+      - 'linux/**'
+      - 'docs/PARITY_MATRIX.md'
+      - '.github/workflows/linux-ci.yml'
+  pull_request:
+    paths:
+      - 'linux/**'
+      - 'docs/PARITY_MATRIX.md'
+      - '.github/workflows/linux-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gbw-linux-baseline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-baseline:
+    name: Validate frozen Linux baseline metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate baseline identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f linux/BASELINE.md
+          test -f linux/README.md
+          test -f docs/PARITY_MATRIX.md
+          grep -Fq '5.23.0' linux/BASELINE.md
+          grep -Fq 'ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a' linux/BASELINE.md
+          echo 'GBW Linux 5.23 baseline metadata: OK'

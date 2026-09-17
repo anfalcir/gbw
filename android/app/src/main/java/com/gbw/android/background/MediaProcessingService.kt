@@ -95,9 +95,7 @@ class MediaProcessingService : Service() {
 
     override fun onTimeout(startId: Int, fgsType: Int) {
         val current = store.load()
-        if (current != null) {
-            store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
-        }
+        if (current != null) store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
         activeJob?.cancel()
         stopSelf(startId)
     }

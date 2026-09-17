@@ -1,73 +1,83 @@
 # GBW — Estado Atual
 
 **Data:** 2026-09-17  
-**Repositório:** `anfalcir/gbw`
+**Repositório:** `anfalcir/gbw`  
+**Branch principal:** `main`
+
+## Organização
+
+- `linux/` — identidade congelada do baseline Linux 5.23.
+- `android/` — aplicação Android nativa ativa.
+- `docs/` — contratos, roadmap, paridade e handoff.
+- `.github/workflows/` — automação CI.
 
 ## Linux
 
 - Baseline congelado: **GBW Linux 5.23.0**.
-- ZIP autoritativo: `Guitar_Backing_Wizard_v5.23_Linux.zip`.
+- Pacote autoritativo: `Guitar_Backing_Wizard_v5.23_Linux.zip`.
 - SHA-256: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`.
-- A pasta `linux/v5.23/src/` contém a fonte expandida correspondente ao baseline.
-- Não alterar esse baseline durante a migração Android sem decisão explícita de revisão da baseline.
+- A referência Linux é imutável durante a migração Android salvo decisão explícita de nova baseline.
+- Contratos portáveis estão em `docs/PARITY_MATRIX.md`.
 
 ## Android
 
-Linha de desenvolvimento: **6.0.0-alpha1**.
+Linha atual: **6.0.0-alpha1**.
 
-### Implementado no código
+### Implementado
 
-- Projeto Android nativo Kotlin + Jetpack Compose.
-- Navegação responsiva inicial para tablet/telefone.
-- Domínio portado da v5.23:
-  - afinações;
-  - delta global de semitons;
-  - validação do workflow;
-  - normalização de artista/música;
-  - regras de qualidade do input;
-  - regras do Pitch de Arquivo.
-- Separação **Rápida / Demucs** como padrão Android.
-- Alta qualidade / BS-RoFormer preservada como opção de domínio/UI.
-- Pitch de Arquivo com:
-  - seletor SAF;
-  - inspeção WAV nativa;
-  - inspeção FFmpeg para formatos não-WAV;
-  - classificação Ideal / Adequado / Ressalva;
-  - modo por afinação e por semitons;
-  - Instrumento/Mix e Vocal;
-  - seleção de formato final.
-- Infraestrutura de `ForegroundService` do tipo `mediaProcessing`:
-  - notificação persistente;
-  - cancelamento;
-  - estado persistido do job;
-  - callback de timeout Android moderno.
-- Testes de paridade de domínio e smoke test independente do SDK.
+- projeto nativo Kotlin + Jetpack Compose;
+- domínio portado da v5.23: afinações, delta global, workflow, normalização textual, regras de qualidade e Pitch de Arquivo;
+- **Rápida / Demucs** como separação padrão Android;
+- Alta qualidade / BS-RoFormer preservada como opção;
+- inspetor WAV nativo;
+- fallback FFmpeg para formatos adicionais;
+- estados Ideal / Adequado / Ressalva;
+- infraestrutura `ForegroundService` `mediaProcessing`;
+- persistência básica de jobs;
+- cancelamento/timeout;
+- UI Compose inicial;
+- smoke test e testes de paridade de domínio.
 
-### Validado neste ambiente
+### Toolchain fixado
 
-- SHA do baseline Linux confirmado.
-- Smoke test de domínio Kotlin: `DOMAIN_SMOKE_OK`.
-- Estrutura de projeto e contratos de domínio auditados estaticamente.
+- AGP `9.4.0`;
+- Gradle `9.6.0`;
+- JDK `17`;
+- Kotlin `2.4.20`;
+- Compose BOM `2026.08.00`;
+- compileSdk `37`;
+- targetSdk `36`;
+- minSdk `28`.
 
-### Ainda NÃO homologado
+### Ainda não homologado
 
-- Build APK completo com Android SDK/AGP.
-- Rubber Band R3 via NDK/JNI.
-- Render de Pitch de Arquivo ponta a ponta no Android.
-- Demucs/htdemucs_6s real no Android.
-- BS-RoFormer-SW real no Android.
-- Workflow completo Fonte → Separação → Afinação → Exportação.
-- Persistência/restore cross-platform completos.
-- Homologação em dispositivo Android real.
+- primeiro Android CI verde após a consolidação;
+- Rubber Band R3 NDK/JNI;
+- Pitch de Arquivo ponta a ponta com render R3;
+- Demucs `htdemucs_6s` real no Android;
+- BS-RoFormer real no Android;
+- workflow completo Fonte → Separação → Afinação → Exportação;
+- persistência/restore cross-platform completos;
+- homologação física arm64/background/thermal.
+
+## CI
+
+A política manual-only foi revogada.
+
+- **Todo commit/push em qualquer branch dispara Android CI automaticamente.**
+- O agente deve consultar o run, jobs e logs sem pedir ação manual ao usuário.
+- Falhas devem ser corrigidas por novo commit; gates obrigatórios não podem ser silenciados.
+- Um run verde publica APK debug, SHA-256 e relatórios como artifacts.
+- `workflow_dispatch` permanece somente como fallback.
 
 ## Próximo gate
 
-1. Compilar `android/` em CI/manual toolchain Android.
-2. Corrigir qualquer incompatibilidade de AGP/Compose/FFmpegKit.
-3. Integrar Rubber Band R3 NDK/JNI.
-4. Fechar Pitch de Arquivo ponta a ponta.
-5. Benchmarkar Demucs 6 stems no Android real.
+1. obter o primeiro Android CI verde no repositório consolidado;
+2. corrigir incompatibilidades reais de toolchain/dependências;
+3. integrar Rubber Band R3 via NDK/JNI;
+4. fechar Pitch de Arquivo ponta a ponta;
+5. provar e benchmarkar Demucs 6 stems em Android arm64 real.
 
-## Política de CI
+## Continuidade
 
-O workflow Android deste repositório é **manual-only** (`workflow_dispatch`). Nenhum push deve consumir GitHub Actions automaticamente.
+O prompt oficial para outro chat está em `docs/ANDROID_HANDOFF_PROMPT.md`. A nova sessão deve confirmar o HEAD e o estado real da CI antes de escrever.

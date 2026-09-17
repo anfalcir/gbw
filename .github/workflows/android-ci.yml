@@ -1,19 +1,22 @@
-name: Android CI (manual)
+name: Android CI
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: gbw-android-manual
-  cancel-in-progress: false
+  group: gbw-android-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
+    name: Test, lint and build APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -28,7 +31,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android platform/build tools
+      - name: Install Android SDK components
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
@@ -41,26 +44,70 @@ jobs:
         with:
           gradle-version: '9.6.0'
 
-      - name: Domain smoke test
+      - name: Toolchain info
+        working-directory: android
+        run: |
+          java -version
+          gradle --version
+
+      - name: Domain parity smoke
         working-directory: android
         run: bash scripts/validate_domain.sh
 
       - name: Unit tests
         working-directory: android
-        run: gradle --no-daemon testDebugUnitTest
+        run: gradle --no-daemon --stacktrace testDebugUnitTest
 
-      - name: Lint
+      - name: Android Lint
         working-directory: android
-        run: gradle --no-daemon lintDebug
+        run: gradle --no-daemon --stacktrace lintDebug
 
       - name: Assemble debug APK
         working-directory: android
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Generate build metadata
+        id: metadata
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA256" "app-debug.apk" > app/build/outputs/apk/debug/SHA256SUMS.txt
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "ref=${GITHUB_REF}"
+            echo "sha256=${SHA256}"
+            echo "workflow_run=${GITHUB_RUN_ID}"
+          } > app/build/outputs/apk/debug/build-info.txt
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          {
+            echo "## GBW Android build"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- APK SHA-256: \`${SHA256}\`"
+            echo "- Artifact: \`GBW-Android-debug-${GITHUB_RUN_NUMBER}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: GBW-Android-6.0.0-alpha1-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: GBW-Android-debug-${{ github.run_number }}
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/SHA256SUMS.txt
+            android/app/build/outputs/apk/debug/build-info.txt
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GBW-Android-reports-${{ github.run_number }}
+          path: |
+            android/app/build/reports/**
+            android/app/build/test-results/**
+          if-no-files-found: ignore
           retention-days: 14
