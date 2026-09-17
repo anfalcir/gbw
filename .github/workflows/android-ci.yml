@@ -84,7 +84,9 @@ jobs:
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -f "$APK"
           unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_rubberband.so"
+          unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_demucs.so"
           echo "APK_NATIVE_R3_OK"
+          echo "APK_NATIVE_DEMUCS_OK"
 
       - name: Generate build metadata
         id: metadata
@@ -103,6 +105,9 @@ jobs:
             echo "workflow_run=${GITHUB_RUN_ID}"
             echo "rubberband_version=4.0.0"
             echo "rubberband_commit=1d95888bec3ae0a17c0c4af791810d5a63f6bc35"
+            echo "demucs_cpp_commit=f1206e9adeea103aef4a636b9e62297cf1f8e34e"
+            echo "eigen_commit=dd8c71e62852b2fe429edb6682ac91fd1c578a26"
+            echo "demucs_model_contract=htdemucs_6s"
             echo "android_abi=arm64-v8a"
           } > app/build/outputs/apk/debug/build-info.txt
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
@@ -111,6 +116,8 @@ jobs:
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo "- APK SHA-256: \`${SHA256}\`"
             echo "- Rubber Band: \`4.0.0 @ 1d95888bec3ae0a17c0c4af791810d5a63f6bc35\`"
+            echo "- demucs.cpp: \`f1206e9adeea103aef4a636b9e62297cf1f8e34e\`"
+            echo "- Demucs model contract: \`htdemucs_6s\` (weights external to APK)"
             echo "- Native ABI: \`arm64-v8a\`"
             echo "- Artifact: \`GBW-Android-debug-${GITHUB_RUN_NUMBER}\`"
           } >> "$GITHUB_STEP_SUMMARY"
