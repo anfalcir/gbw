@@ -7,7 +7,7 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-/** Minimal seekable IEEE-float WAV reader/writer used by the native pitch pipeline. */
+/** Minimal seekable IEEE-float WAV reader/writer used by native DSP pipelines. */
 data class FloatWavInfo(
     val sampleRate: Int,
     val channels: Int,
@@ -25,9 +25,14 @@ class FloatWavReader(file: File) : Closeable {
         input.seek(info.dataOffset)
     }
 
-    fun rewind() {
-        input.seek(info.dataOffset)
-        framesRemaining = info.frames
+    fun rewind() = seekFrame(0L)
+
+    fun seekFrame(frame: Long) {
+        require(frame in 0L..info.frames) { "WAV frame fora dos limites: $frame / ${info.frames}" }
+        val bytesPerFrame = Math.multiplyExact(info.channels.toLong(), 4L)
+        val byteOffset = Math.multiplyExact(frame, bytesPerFrame)
+        input.seek(Math.addExact(info.dataOffset, byteOffset))
+        framesRemaining = info.frames - frame
     }
 
     fun remainingFrames(): Long = framesRemaining

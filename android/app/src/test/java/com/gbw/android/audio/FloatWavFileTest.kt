@@ -45,6 +45,32 @@ class FloatWavFileTest {
         }
     }
 
+    @Test
+    fun `reader can seek to exact frame for bounded dsp windows`() {
+        val file = File.createTempFile("gbw-f32-seek-", ".wav")
+        try {
+            val channels = 2
+            val frames = 1_024
+            val samples = FloatArray(frames * channels) { it.toFloat() / 10_000f }
+            FloatWavWriter(file, 44_100, channels).use { it.write(samples) }
+
+            FloatWavReader(file).use { reader ->
+                reader.seekFrame(333L)
+                assertEquals((frames - 333).toLong(), reader.remainingFrames())
+                val block = reader.readBlock(17)
+                assertArrayEquals(
+                    samples.copyOfRange(333 * channels, (333 + 17) * channels),
+                    block,
+                    0f,
+                )
+                reader.seekFrame(frames.toLong())
+                assertTrue(reader.readBlock(1).isEmpty())
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `reader rejects non wav input`() {
         val file = File.createTempFile("gbw-bad-", ".wav")

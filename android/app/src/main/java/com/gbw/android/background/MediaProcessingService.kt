@@ -20,6 +20,8 @@ import com.gbw.android.audio.FilePitchRenderRequest
 import com.gbw.android.audio.FilePitchRenderer
 import com.gbw.android.domain.AudioKind
 import com.gbw.android.domain.OutputFormat
+import com.gbw.android.separation.DemucsNative
+import com.gbw.android.separation.DemucsSeparator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,9 +50,14 @@ class MediaProcessingService : Service() {
         when (action) {
             ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
             ACTION_SELF_TEST -> startSelfTest()
-            ACTION_FILE_PITCH -> startFilePitch(intent, flags)
+            ACTION_FILE_PITCH -> startFilePitch(requireNotNull(intent), flags)
+            ACTION_DEMUCS_QUICK -> startDemucsQuick(requireNotNull(intent), flags)
         }
-        return if (action == ACTION_FILE_PITCH) START_REDELIVER_INTENT else START_NOT_STICKY
+        return if (action == ACTION_FILE_PITCH || action == ACTION_DEMUCS_QUICK) {
+            START_REDELIVER_INTENT
+        } else {
+            START_NOT_STICKY
+        }
     }
 
     private fun startFilePitch(intent: Intent, startFlags: Int) {
@@ -65,17 +72,7 @@ class MediaProcessingService : Service() {
             runCatching { OutputFormat.valueOf(it) }.getOrNull()
         }
         if (input == null || output == null || semitones == Int.MIN_VALUE || audioKind == null || outputFormat == null) {
-            val invalid = PersistedJob(
-                id = UUID.randomUUID().toString(),
-                type = "file-pitch",
-                label = "Pitch de Arquivo",
-                state = "ERROR",
-                progress = 0,
-                startedAt = System.currentTimeMillis(),
-                message = "Parâmetros inválidos para iniciar o processamento.",
-            )
-            store.save(invalid)
-            stopSelf()
+            saveInvalid("file-pitch", "Pitch de Arquivo", "Parâmetros inválidos para iniciar o processamento.")
             return
         }
 
@@ -111,27 +108,101 @@ class MediaProcessingService : Service() {
                     updateJob(persisted, progress, message)
                 }
                 val message = "Concluído • ${result.sampleRate} Hz • ${result.channels} canal(is) • ${result.rubberBandIdentity}"
-                val success = persisted.copy(state = "SUCCESS", progress = 100, message = message)
-                store.save(success)
-                notificationManager().notify(NOTIFICATION_ID, notification(success))
+                finishSuccess(persisted, message)
             } catch (cancelled: CancellationException) {
-                val current = store.load()
-                if (current?.state == "RUNNING") {
-                    store.save(current.copy(state = "CANCELLED", message = "Processamento cancelado com cleanup concluído."))
-                }
+                finishCancelledIfRunning("Processamento cancelado com cleanup concluído.")
             } catch (error: Exception) {
-                val failed = persisted.copy(
-                    state = "ERROR",
-                    message = error.message ?: "Falha inesperada no Pitch de Arquivo.",
-                )
-                store.save(failed)
-                notificationManager().notify(NOTIFICATION_ID, notification(failed))
+                finishError(persisted, error.message ?: "Falha inesperada no Pitch de Arquivo.")
             } finally {
-                releaseWakeLock()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                finishForegroundJob()
             }
         }
+    }
+
+    private fun startDemucsQuick(intent: Intent, startFlags: Int) {
+        if (activeJob?.isActive == true) return
+        val input = intent.getStringExtra(EXTRA_INPUT_URI)?.let(Uri::parse)
+        if (input == null) {
+            saveInvalid("separation-quick", "Separação Rápida", "Arquivo de entrada inválido para Demucs.")
+            return
+        }
+
+        val persisted = PersistedJob(
+            id = intent.getStringExtra(EXTRA_JOB_ID) ?: UUID.randomUUID().toString(),
+            type = "separation-quick",
+            label = "Separação Rápida",
+            state = "RUNNING",
+            progress = 0,
+            startedAt = System.currentTimeMillis(),
+            message = if ((startFlags and START_FLAG_REDELIVERY) != 0) {
+                "Retomando a unidade de separação após reinício do processo…"
+            } else {
+                "Preparando htdemucs_6s…"
+            },
+        )
+        store.save(persisted)
+        startAsForeground(notification(persisted))
+        acquireWakeLock()
+
+        activeJob = scope.launch {
+            try {
+                val result = DemucsSeparator.separate(
+                    context = this@MediaProcessingService,
+                    inputUri = input,
+                    jobId = persisted.id,
+                ) { progress, message -> updateJob(persisted, progress, message) }
+                val elapsedSeconds = result.elapsedMillis / 1_000L
+                val peakMiB = result.peakObservedPssKb / 1_024L
+                val message = "Concluído • 6 stems • 44,1 kHz • ${elapsedSeconds}s • PSS observado ${peakMiB} MiB"
+                finishSuccess(persisted, message)
+            } catch (cancelled: CancellationException) {
+                finishCancelledIfRunning("Separação cancelada; stems parciais removidos.")
+            } catch (error: Exception) {
+                finishError(persisted, error.message ?: "Falha inesperada na Separação Rápida.")
+            } finally {
+                finishForegroundJob()
+            }
+        }
+    }
+
+    private fun saveInvalid(type: String, label: String, message: String) {
+        store.save(
+            PersistedJob(
+                id = UUID.randomUUID().toString(),
+                type = type,
+                label = label,
+                state = "ERROR",
+                progress = 0,
+                startedAt = System.currentTimeMillis(),
+                message = message,
+            )
+        )
+        stopSelf()
+    }
+
+    private fun finishSuccess(base: PersistedJob, message: String) {
+        val success = base.copy(state = "SUCCESS", progress = 100, message = message)
+        store.save(success)
+        notificationManager().notify(NOTIFICATION_ID, notification(success))
+    }
+
+    private fun finishError(base: PersistedJob, message: String) {
+        val failed = base.copy(state = "ERROR", message = message)
+        store.save(failed)
+        notificationManager().notify(NOTIFICATION_ID, notification(failed))
+    }
+
+    private fun finishCancelledIfRunning(message: String) {
+        val current = store.load()
+        if (current?.state == "RUNNING") {
+            store.save(current.copy(state = "CANCELLED", message = message))
+        }
+    }
+
+    private fun finishForegroundJob() {
+        releaseWakeLock()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun updateJob(base: PersistedJob, progress: Int, message: String) {
@@ -169,15 +240,14 @@ class MediaProcessingService : Service() {
                 }
                 store.save(persisted.copy(state = "SUCCESS", progress = 100, message = "Teste concluído"))
             } finally {
-                releaseWakeLock()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                finishForegroundJob()
             }
         }
     }
 
     private fun cancelCurrent(message: String) {
         val current = store.load()
+        if (current?.type == "separation-quick") DemucsNative.cancel()
         if (current != null && current.state == "RUNNING") {
             store.save(current.copy(state = "CANCELLED", message = message))
         }
@@ -217,6 +287,7 @@ class MediaProcessingService : Service() {
 
     override fun onTimeout(startId: Int, fgsType: Int) {
         val current = store.load()
+        if (current?.type == "separation-quick") DemucsNative.cancel()
         if (current != null) {
             store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
         }
@@ -255,6 +326,7 @@ class MediaProcessingService : Service() {
     private fun notificationManager() = getSystemService(NotificationManager::class.java)
 
     override fun onDestroy() {
+        if (::store.isInitialized && store.load()?.type == "separation-quick") DemucsNative.cancel()
         activeJob?.cancel()
         releaseWakeLock()
         scope.cancel()
@@ -267,6 +339,7 @@ class MediaProcessingService : Service() {
         const val ACTION_SELF_TEST = "com.gbw.android.action.BACKGROUND_SELF_TEST"
         const val ACTION_CANCEL = "com.gbw.android.action.CANCEL_MEDIA_JOB"
         const val ACTION_FILE_PITCH = "com.gbw.android.action.FILE_PITCH"
+        const val ACTION_DEMUCS_QUICK = "com.gbw.android.action.DEMUCS_QUICK"
 
         private const val EXTRA_INPUT_URI = "input_uri"
         private const val EXTRA_OUTPUT_URI = "output_uri"
@@ -297,6 +370,15 @@ class MediaProcessingService : Service() {
             .putExtra(EXTRA_AUDIO_KIND, audioKind.name)
             .putExtra(EXTRA_OUTPUT_FORMAT, outputFormat.name)
             .putExtra(EXTRA_CAUTION_ACCEPTED, cautionAccepted)
+            .putExtra(EXTRA_JOB_ID, jobId)
+
+        fun demucsQuickIntent(
+            context: Context,
+            inputUri: Uri,
+            jobId: String = UUID.randomUUID().toString(),
+        ): Intent = Intent(context, MediaProcessingService::class.java)
+            .setAction(ACTION_DEMUCS_QUICK)
+            .putExtra(EXTRA_INPUT_URI, inputUri.toString())
             .putExtra(EXTRA_JOB_ID, jobId)
     }
 }
