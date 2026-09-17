@@ -37,14 +37,16 @@ jobs:
           cache: pip
           cache-dependency-path: linux/app/requirements.txt
 
-      - name: Install validation dependencies
+      - name: Install baseline-compatible validation dependencies
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg xvfb python3-tk
           python -m pip install --upgrade pip
-          python -m pip install customtkinter 'yt-dlp[default,curl-cffi]' 'librosa>=0.11'
+          # Keep the GUI dependency inside the exact compatibility range declared
+          # by the frozen v5.23 distribution. Do not silently validate against CTk 6.x.
+          python -m pip install 'customtkinter>=5.2,<6' 'yt-dlp[default,curl-cffi]>=2024.8.6' 'librosa>=0.11'
 
       - name: Validate baseline identity and tree integrity
         shell: bash
