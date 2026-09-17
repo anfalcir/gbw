@@ -179,25 +179,125 @@ private fun PlaceholderScreen(title: String, text: String) {
 
 @Composable
 private fun SeparationScreen() {
+    val context = LocalContext.current
+    val jobStore = remember(context) { JobStore(context) }
     var mode by rememberSaveable { mutableStateOf(SeparationMode.androidDefault.name) }
+    var uriText by rememberSaveable { mutableStateOf("") }
+    var resultMessage by remember { mutableStateOf<String?>(null) }
+    var jobState by remember { mutableStateOf(jobStore.load()) }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) {
+            }
+            uriText = uri.toString()
+            resultMessage = null
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            jobState = jobStore.load()
+            delay(500)
+        }
+    }
+
+    val selectedMode = SeparationMode.valueOf(mode)
+    val separationJob = jobState?.takeIf { it.type == "separation-quick" }
+    val jobRunning = separationJob?.state == "RUNNING"
+
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Separação", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("No Android, a opção rápida é o padrão para reduzir tempo, RAM, temperatura e consumo de bateria.")
+
         SeparationMode.entries.forEach { item ->
-            OutlinedCard(onClick = { mode = item.name }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedCard(
+                onClick = { if (!jobRunning) mode = item.name },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = mode == item.name, onClick = { mode = item.name })
+                    RadioButton(
+                        selected = mode == item.name,
+                        onClick = { if (!jobRunning) mode = item.name },
+                        enabled = !jobRunning,
+                    )
                     Column(Modifier.padding(start = 8.dp)) {
                         Text(item.publicLabel, fontWeight = FontWeight.SemiBold)
                         Text(when (item) {
-                            SeparationMode.QUICK -> "Demucs htdemucs_6s • uso diário recomendado"
-                            SeparationMode.HIGH_QUALITY -> "BS-RoFormer-SW • mais pesado e demorado"
-                            SeparationMode.COMPARE -> "Executa as duas opções para comparação"
+                            SeparationMode.QUICK -> "Demucs htdemucs_6s • 6 stems • uso diário recomendado"
+                            SeparationMode.HIGH_QUALITY -> "BS-RoFormer-SW • mais pesado e demorado • ainda não conectado"
+                            SeparationMode.COMPARE -> "Executa as duas opções para comparação • disponível após BS-RoFormer"
                         })
                     }
                 }
             }
         }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Arquivo para separar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Button(
+                    onClick = { picker.launch(arrayOf("audio/*")) },
+                    enabled = !jobRunning,
+                ) { Text(if (uriText.isBlank()) "Selecionar áudio…" else "Trocar áudio…") }
+                if (uriText.isNotBlank()) {
+                    Text(Uri.parse(uriText).lastPathSegment ?: "Arquivo selecionado", style = MaterialTheme.typography.bodySmall)
+                }
+                Text(
+                    "Na primeira execução da Separação Rápida o GBW baixa aproximadamente 54,9 MB do modelo htdemucs_6s, valida tamanho e SHA-256 e mantém o arquivo no armazenamento privado do app.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "O áudio é preparado em estéreo/44,1 kHz e processado em janelas limitadas para evitar carregar a música inteira em RAM.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+
+        if (selectedMode == SeparationMode.QUICK) {
+            Button(
+                onClick = {
+                    val input = uriText.takeIf { it.isNotBlank() }?.let(Uri::parse)
+                    if (input == null) {
+                        resultMessage = "Selecione um arquivo de áudio antes de iniciar."
+                    } else {
+                        val intent = MediaProcessingService.demucsQuickIntent(context, input)
+                        ContextCompat.startForegroundService(context, intent)
+                        resultMessage = "Separação Rápida iniciada em segundo plano. Você pode trocar de tela ou bloquear o dispositivo."
+                    }
+                },
+                enabled = uriText.isNotBlank() && !jobRunning,
+            ) { Text("Iniciar Separação Rápida") }
+        } else {
+            OutlinedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Motor ainda em implementação", fontWeight = FontWeight.SemiBold)
+                    Text("Este gate mantém somente a Separação Rápida executável. O BS-RoFormer-SW será conectado no próximo bloco sem substituir o Demucs.")
+                }
+            }
+        }
+
+        separationJob?.let { job ->
+            OutlinedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Separação Rápida", fontWeight = FontWeight.SemiBold)
+                    Text("${job.state} • ${job.progress}%")
+                    Text(job.message)
+                    if (job.state == "RUNNING") {
+                        OutlinedButton(onClick = {
+                            context.startService(
+                                Intent(context, MediaProcessingService::class.java)
+                                    .setAction(MediaProcessingService.ACTION_CANCEL)
+                            )
+                        }) { Text("Cancelar separação") }
+                    }
+                }
+            }
+        }
+
+        resultMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
     }
 }
 
@@ -518,7 +618,8 @@ private fun SystemScreen() {
         StatusLine("FFmpeg", "Inspeção + preparação/encode do Pitch")
         StatusLine("Rubber Band R3", "v4.0.0 via NDK/JNI • arm64-v8a")
         StatusLine("Pitch de Arquivo", "Pipeline R3 integrado ao serviço")
-        StatusLine("Demucs htdemucs_6s", "Próximo gate")
+        StatusLine("Demucs htdemucs_6s", "Runtime + modelo + 6 stems implementados")
+        StatusLine("Homologação Demucs", "CI arm64 aprovada • execução física pendente")
         OutlinedButton(onClick = {
             val intent = Intent(context, MediaProcessingService::class.java).setAction(MediaProcessingService.ACTION_SELF_TEST)
             ContextCompat.startForegroundService(context, intent)
