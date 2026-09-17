@@ -64,6 +64,18 @@ jobs:
         working-directory: android
         run: bash scripts/validate_rubberband_host.sh
 
+      - name: Cache pinned Demucs checkpoint
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/gbw/demucs
+          key: gbw-demucs-09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856
+
+      - name: Demucs model checkpoint smoke
+        working-directory: android
+        env:
+          GBW_MODEL_CACHE_DIR: ~/.cache/gbw/demucs
+        run: bash scripts/validate_demucs_model.sh
+
       - name: Unit tests
         working-directory: android
         run: gradle --no-daemon --stacktrace testDebugUnitTest
@@ -108,6 +120,9 @@ jobs:
             echo "demucs_cpp_commit=f1206e9adeea103aef4a636b9e62297cf1f8e34e"
             echo "eigen_commit=dd8c71e62852b2fe429edb6682ac91fd1c578a26"
             echo "demucs_model_contract=htdemucs_6s"
+            echo "demucs_model_source_revision=5f5daffffcf06ad7b27a7285da327e18ea62068a"
+            echo "demucs_model_bytes=54855129"
+            echo "demucs_model_sha256=09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856"
             echo "android_abi=arm64-v8a"
           } > app/build/outputs/apk/debug/build-info.txt
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
@@ -117,7 +132,8 @@ jobs:
             echo "- APK SHA-256: \`${SHA256}\`"
             echo "- Rubber Band: \`4.0.0 @ 1d95888bec3ae0a17c0c4af791810d5a63f6bc35\`"
             echo "- demucs.cpp: \`f1206e9adeea103aef4a636b9e62297cf1f8e34e\`"
-            echo "- Demucs model contract: \`htdemucs_6s\` (weights external to APK)"
+            echo "- Demucs model: \`htdemucs_6s @ 5f5daffffcf06ad7b27a7285da327e18ea62068a\`"
+            echo "- Demucs model SHA-256: \`09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856\`"
             echo "- Native ABI: \`arm64-v8a\`"
             echo "- Artifact: \`GBW-Android-debug-${GITHUB_RUN_NUMBER}\`"
           } >> "$GITHUB_STEP_SUMMARY"
