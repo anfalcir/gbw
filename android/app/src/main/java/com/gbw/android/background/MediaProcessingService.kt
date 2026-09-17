@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.gbw.android.MainActivity
@@ -33,6 +34,7 @@ import java.util.UUID
 class MediaProcessingService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var activeJob: Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var store: JobStore
 
     override fun onCreate() {
@@ -42,15 +44,16 @@ class MediaProcessingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        val action = intent?.action
+        when (action) {
             ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
             ACTION_SELF_TEST -> startSelfTest()
-            ACTION_FILE_PITCH -> startFilePitch(intent)
+            ACTION_FILE_PITCH -> startFilePitch(intent, flags)
         }
-        return START_NOT_STICKY
+        return if (action == ACTION_FILE_PITCH) START_REDELIVER_INTENT else START_NOT_STICKY
     }
 
-    private fun startFilePitch(intent: Intent) {
+    private fun startFilePitch(intent: Intent, startFlags: Int) {
         if (activeJob?.isActive == true) return
         val input = intent.getStringExtra(EXTRA_INPUT_URI)?.let(Uri::parse)
         val output = intent.getStringExtra(EXTRA_OUTPUT_URI)?.let(Uri::parse)
@@ -83,10 +86,15 @@ class MediaProcessingService : Service() {
             state = "RUNNING",
             progress = 0,
             startedAt = System.currentTimeMillis(),
-            message = "Iniciando processamento…",
+            message = if ((startFlags and START_FLAG_REDELIVERY) != 0) {
+                "Retomando processamento após reinício do processo…"
+            } else {
+                "Iniciando processamento…"
+            },
         )
         store.save(persisted)
         startAsForeground(notification(persisted))
+        acquireWakeLock()
         val request = FilePitchRenderRequest(
             inputUri = input,
             outputUri = output,
@@ -119,6 +127,7 @@ class MediaProcessingService : Service() {
                 store.save(failed)
                 notificationManager().notify(NOTIFICATION_ID, notification(failed))
             } finally {
+                releaseWakeLock()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -148,6 +157,7 @@ class MediaProcessingService : Service() {
         )
         store.save(persisted)
         startAsForeground(notification(persisted))
+        acquireWakeLock()
         activeJob = scope.launch {
             try {
                 for (p in 1..100) {
@@ -159,6 +169,7 @@ class MediaProcessingService : Service() {
                 }
                 store.save(persisted.copy(state = "SUCCESS", progress = 100, message = "Teste concluído"))
             } finally {
+                releaseWakeLock()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -171,8 +182,24 @@ class MediaProcessingService : Service() {
             store.save(current.copy(state = "CANCELLED", message = message))
         }
         activeJob?.cancel(CancellationException(message))
+        releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun acquireWakeLock() {
+        releaseWakeLock()
+        val manager = getSystemService(PowerManager::class.java)
+        wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "GBW:media-processing").apply {
+            setReferenceCounted(false)
+            acquire(MAX_WAKE_LOCK_MS)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        val current = wakeLock
+        if (current?.isHeld == true) current.release()
+        wakeLock = null
     }
 
     private fun startAsForeground(notification: Notification) {
@@ -194,6 +221,7 @@ class MediaProcessingService : Service() {
             store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
         }
         activeJob?.cancel(CancellationException("Foreground service timeout"))
+        releaseWakeLock()
         stopSelf(startId)
     }
 
@@ -228,6 +256,7 @@ class MediaProcessingService : Service() {
 
     override fun onDestroy() {
         activeJob?.cancel()
+        releaseWakeLock()
         scope.cancel()
         super.onDestroy()
     }
@@ -249,6 +278,7 @@ class MediaProcessingService : Service() {
 
         private const val CHANNEL_ID = "gbw_media_processing"
         private const val NOTIFICATION_ID = 2301
+        private const val MAX_WAKE_LOCK_MS = 6L * 60L * 60L * 1000L
 
         fun filePitchIntent(
             context: Context,

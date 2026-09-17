@@ -2,6 +2,7 @@ package com.gbw.android.audio
 
 import android.content.Context
 import android.net.Uri
+import android.os.StatFs
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegKitConfig
 import com.arthenica.ffmpegkit.FFprobeKit
@@ -29,6 +30,7 @@ internal object FfmpegPitchIo {
         inspection: AudioInspection,
         output: File,
     ) {
+        ensureWorkingSpace(context, inspection)
         val input = FFmpegKitConfig.getSafParameterForRead(context, inputUri)
         require(input.isNotBlank()) { "Não foi possível abrir o arquivo de entrada pelo SAF." }
         output.parentFile?.mkdirs()
@@ -88,6 +90,24 @@ internal object FfmpegPitchIo {
             }
         }
         cont.invokeOnCancellation { session.cancel() }
+    }
+
+    private fun ensureWorkingSpace(context: Context, inspection: AudioInspection) {
+        val rate = inspection.sampleRate ?: return
+        val channels = inspection.channels ?: return
+        // Use the three-copy case as a conservative preflight even when the selected final output is float32.
+        val required = FilePitchStorageBudget.requiredBytes(
+            durationSeconds = inspection.durationSeconds,
+            sampleRate = rate,
+            channels = channels,
+            outputFormat = OutputFormat.WAV_24,
+        ) ?: return
+        val available = StatFs(context.cacheDir.absolutePath).availableBytes
+        require(available >= required) {
+            val requiredMiB = required / (1024L * 1024L)
+            val availableMiB = available / (1024L * 1024L)
+            "Espaço temporário insuficiente: são necessários cerca de ${requiredMiB} MiB; disponíveis ${availableMiB} MiB."
+        }
     }
 
     private suspend fun execute(command: String, errorMessage: String) = suspendCancellableCoroutine<Unit> { cont ->
