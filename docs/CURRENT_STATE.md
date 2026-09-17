@@ -45,7 +45,7 @@ Linha atual: **6.0.0-alpha1**.
 - JDK `17`;
 - Kotlin `2.4.20`;
 - Compose BOM `2026.08.00`;
-- compileSdk `37`;
+- compileSdk `36`;
 - targetSdk `36`;
 - minSdk `28`.
 

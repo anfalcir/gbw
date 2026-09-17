@@ -15,7 +15,7 @@ A árvore Android já contém domínio portado e infraestrutura inicial, mas ain
 - Gradle `9.6.0`.
 - JDK `17`.
 - Jetpack Compose BOM `2026.08.00`.
-- `compileSdk 37`, `targetSdk 36`, `minSdk 28`.
+- `compileSdk 36`, `targetSdk 36`, `minSdk 28`.
 - Storage Access Framework para arquivos do usuário.
 - Foreground Service `mediaProcessing` para tarefas longas.
 - FFmpegKit mantido temporariamente para inspeção/codec enquanto a camada de mídia é consolidada.

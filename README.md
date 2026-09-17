@@ -44,7 +44,7 @@ A pasta [`android/`](android/) contém a reimplementação nativa, atualmente na
 Princípios consolidados:
 
 - Kotlin + Jetpack Compose / Material 3;
-- AGP 9.4.0, Gradle 9.6, JDK 17, compileSdk 37;
+- AGP 9.4.0, Gradle 9.6, JDK 17, compileSdk/targetSdk 36;
 - tarefas longas independentes da Activity;
 - `ForegroundService` para processamento prolongado;
 - **Separação Rápida / Demucs** como padrão Android;
