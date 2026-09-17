@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "com.gbw.android"
     compileSdk = 37
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "com.gbw.android"
@@ -16,6 +17,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -36,6 +41,13 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     packaging {
