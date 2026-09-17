@@ -1,0 +1,137 @@
+name: Materialize GBW Linux 5.23
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/linux-materialize-v523.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify authoritative package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="linux/app/Guitar_Backing_Wizard_v5.23_Linux.zip"
+          EXPECTED="ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a"
+          test -f "$ZIP"
+          ACTUAL="$(sha256sum "$ZIP" | awk '{print $1}')"
+          echo "Expected: $EXPECTED"
+          echo "Actual:   $ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Materialize exact distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="linux/app/Guitar_Backing_Wizard_v5.23_Linux.zip"
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+          unzip -q "$ZIP" -d "$TMP"
+          test -d "$TMP/guitar_backing_wizard"
+          rm -rf linux/app
+          mkdir -p linux/app
+          cp -a "$TMP/guitar_backing_wizard/." linux/app/
+          chmod +x linux/app/install.sh linux/app/run.sh linux/app/criar_atalho.sh linux/app/validate_local.sh linux/app/guitar_backing_wizard.py linux/app/audio_intelligence.py
+
+      - name: Validate preservation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f linux/app/requirements.txt
+          test -f linux/app/gbw/core/system.py
+          test -f linux/app/gbw/ui/main_window.py
+          test -f linux/app/gbw/services/audio.py
+          test -f linux/app/tests/test_core.py
+          test -f linux/app/assets/guitar-backing-wizard.png
+          test -f linux/app/assets/guitar-backing-wizard-128.png
+          python3 -m compileall -q linux/app
+          bash -n linux/app/install.sh
+          bash -n linux/app/run.sh
+          bash -n linux/app/criar_atalho.sh
+          bash -n linux/app/validate_local.sh
+
+      - name: Update preservation contract
+        shell: bash
+        run: |
+          cat > linux/README.md <<'EOF'
+          # GBW Linux 5.23 — distribuição completa
+
+          Esta pasta contém a cópia operacional completa do **Guitar Backing Wizard 5.23.0 para Linux**.
+
+          ## Objetivo
+
+          Baixar a pasta `linux/` é suficiente para preservar, instalar, validar e executar a versão Linux 5.23 sem depender de arquivos externos, conversas anteriores ou reconstrução por memória.
+
+          ## Estrutura
+
+          - `app/` — distribuição Linux completa e pronta para uso.
+          - `BASELINE.md` — identidade e contrato do baseline congelado.
+
+          Dentro de `app/` ficam o código-fonte completo, assets, testes, documentação, `requirements.txt`, `install.sh`, `run.sh`, `criar_atalho.sh` e `validate_local.sh`.
+
+          ## Uso
+
+          ```bash
+          cd linux/app
+          ./install.sh
+          ```
+
+          Depois, para executar diretamente da pasta:
+
+          ```bash
+          ./run.sh
+          ```
+
+          Para validar a distribuição:
+
+          ```bash
+          ./validate_local.sh
+          ```
+
+          ## Identidade
+
+          Baseline: `5.23.0`
+
+          SHA-256 do pacote original validado e usado para materializar esta árvore:
+
+          `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`
+
+          A árvore expandida em `linux/app/` é a forma canônica de preservação no repositório. O ZIP original não é necessário para instalar ou executar o sistema.
+          EOF
+
+          cat > linux/BASELINE.md <<'EOF'
+          # GBW Linux 5.23 — Baseline Congelado
+
+          **Versão:** `5.23.0`  
+          **Pacote de origem validado:** `Guitar_Backing_Wizard_v5.23_Linux.zip`  
+          **SHA-256:** `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`
+
+          `linux/app/` contém a distribuição Linux 5.23 completa, expandida diretamente do pacote autoritativo cuja hash está registrada acima.
+
+          ## Contrato de preservação
+
+          O repositório é autossuficiente para a versão Linux congelada. Uma cópia da pasta `linux/` deve bastar para inspecionar o código, instalar dependências, executar o aplicativo, executar validações, recriar atalhos e preservar assets/testes.
+
+          Não modificar `linux/app/` como efeito colateral do desenvolvimento Android. Uma nova baseline Linux exige decisão explícita, nova versão, nova identidade/hash de origem e atualização coordenada da documentação de paridade.
+          EOF
+
+      - name: Commit final self-contained tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/linux-materialize-v523.yml
+          git add linux
+          git commit -m "linux: preserve complete GBW 5.23 distribution"
+          git push origin HEAD:main
