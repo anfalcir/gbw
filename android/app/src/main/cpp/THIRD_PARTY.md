@@ -63,6 +63,29 @@ The runtime downloads to a `.part` file in private app storage, validates size a
 
 The public Hugging Face dataset card declares **MIT** metadata and documents the upstream Demucs weight origins used for the converted ggml files. That is useful provenance evidence, but the project will still keep pretrained-weight provenance/licence review as an explicit RC audit item rather than inferring that runtime functionality alone clears every redistribution obligation. Keeping the model outside the APK reduces coupling between application distribution and model delivery.
 
+
+## PFFFT — BS-RoFormer spectral DSP
+
+GBW Android uses PFFFT for the native STFT/ISTFT boundary around the
+BS-RoFormer ExecuTorch transformer core.
+
+- Component: PFFFT
+- Upstream: https://github.com/marton78/pffft
+- Pinned source commit: e1dbebc9fbf74247d12f094accbbc470aaee8715
+- Integration: C static library linked into libgbw_bsroformer_spectral.so
+- Android ABI in this gate: arm64-v8a
+- Contract: real FFT 2048, hop 512, periodic Hann, center reflect padding
+
+The pinned LICENSE.txt permits redistribution in source and binary form with
+conditions preserving copyright/conditions/disclaimer and forbids endorsement
+using contributor/UCAR/NCAR names without permission. Upstream describes this
+as BSD-like. Required notices must be carried into release documentation.
+
+The Android spectral implementation is anchored by
+android/tools/BsRoformerSpectralHostSmoke.cpp, whose committed reference bins
+were generated from the exact torch.stft/torch.istft semantics used by the
+BS-RoFormer 0.1.5 source. CI requires this host golden before assembling the APK.
+
 ## Reproducibility
 
 `CMakeLists.txt` fetches exact runtime source commits. `android/scripts/validate_demucs_model.sh` fixes the external checkpoint revision, byte size, SHA-256, six-source magic and representative tensor names. Any future runtime/model upgrade must deliberately change the relevant pins, pass Android CI, update this file and update current-state/parity documentation.

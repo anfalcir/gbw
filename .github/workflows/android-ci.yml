@@ -100,9 +100,9 @@ jobs:
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -f "$APK"
           unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_rubberband.so"
-          unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_demucs.so"
+          unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_demucs.so"\n          unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_bsroformer_spectral.so"
           echo "APK_NATIVE_R3_OK"
-          echo "APK_NATIVE_DEMUCS_OK"
+          echo "APK_NATIVE_DEMUCS_OK"\n          echo "APK_NATIVE_BSROFORMER_SPECTRAL_OK"
 
       - name: Generate build metadata
         id: metadata
@@ -122,7 +122,7 @@ jobs:
             echo "rubberband_version=4.0.0"
             echo "rubberband_commit=1d95888bec3ae0a17c0c4af791810d5a63f6bc35"
             echo "demucs_cpp_commit=f1206e9adeea103aef4a636b9e62297cf1f8e34e"
-            echo "eigen_commit=dd8c71e62852b2fe429edb6682ac91fd1c578a26"
+            echo "eigen_commit=dd8c71e62852b2fe429edb6682ac91fd1c578a26"\n            echo "pffft_commit=e1dbebc9fbf74247d12f094accbbc470aaee8715"\n            echo "bs_roformer_source_commit=244cddd4f7611956eb1cc4958e82b65b4891c019"\n            echo "bs_roformer_checkpoint_sha256=24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e"
             echo "demucs_model_contract=htdemucs_6s"
             echo "demucs_model_source_revision=5f5daffffcf06ad7b27a7285da327e18ea62068a"
             echo "demucs_model_bytes=54855129"

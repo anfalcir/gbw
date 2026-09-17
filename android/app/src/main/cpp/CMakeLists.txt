@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(gbw_native LANGUAGES CXX)
+project(gbw_native LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -124,6 +124,66 @@ target_compile_definitions(
     GBW_EIGEN_COMMIT="${GBW_EIGEN_COMMIT}"
 )
 
+# PFFFT provides the mobile spectral seam around the BS-RoFormer ExecuTorch
+# transformer core. The exact revision is shared with the PyTorch-anchored host
+# golden test, so host and Android cannot silently drift to different FFT code.
+set(GBW_PFFFT_COMMIT "e1dbebc9fbf74247d12f094accbbc470aaee8715")
+
+FetchContent_Declare(
+    pffft_gbw
+    GIT_REPOSITORY https://github.com/marton78/pffft.git
+    GIT_TAG ${GBW_PFFFT_COMMIT}
+    GIT_SHALLOW FALSE
+    GIT_PROGRESS FALSE
+)
+FetchContent_GetProperties(pffft_gbw)
+if(NOT pffft_gbw_POPULATED)
+    FetchContent_Populate(pffft_gbw)
+endif()
+
+add_library(
+    gbw_pffft
+    STATIC
+    ${pffft_gbw_SOURCE_DIR}/src/pffft.c
+    ${pffft_gbw_SOURCE_DIR}/src/pffft_common.c
+)
+set_target_properties(gbw_pffft PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET gbw_pffft PROPERTY C_STANDARD 11)
+target_include_directories(
+    gbw_pffft
+    PUBLIC
+    ${pffft_gbw_SOURCE_DIR}/include
+    PRIVATE
+    ${pffft_gbw_SOURCE_DIR}/src
+)
+target_compile_definitions(gbw_pffft PUBLIC PFFFT_STATIC_DEFINE)
+target_compile_options(gbw_pffft PRIVATE -O3 -Wall -Wextra -Wno-unused-parameter)
+
+add_library(
+    gbw_bsroformer_spectral
+    SHARED
+    gbw_bsroformer_spectral_jni.cpp
+)
+target_compile_features(gbw_bsroformer_spectral PRIVATE cxx_std_17)
+target_compile_options(
+    gbw_bsroformer_spectral
+    PRIVATE
+    -O3
+    -Wall
+    -Wextra
+    -Werror
+    -fexceptions
+    -frtti
+)
+target_compile_definitions(
+    gbw_bsroformer_spectral
+    PRIVATE
+    GBW_PFFFT_COMMIT="${GBW_PFFFT_COMMIT}"
+)
+
 find_library(log-lib log)
+find_library(math-lib m)
 target_link_libraries(gbw_rubberband PRIVATE ${log-lib})
 target_link_libraries(gbw_demucs PRIVATE ${log-lib})
+target_link_libraries(gbw_pffft PRIVATE ${math-lib})
+target_link_libraries(gbw_bsroformer_spectral PRIVATE gbw_pffft ${log-lib} ${math-lib})
