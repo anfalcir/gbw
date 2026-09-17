@@ -15,11 +15,9 @@
 ## Linux
 
 - Baseline congelado: **GBW Linux 5.23.0**.
-- Pacote de origem validado: `Guitar_Backing_Wizard_v5.23_Linux.zip`.
 - SHA-256 do pacote de origem: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`.
-- `linux/app/` preserva a distribuição completa expandida diretamente desse pacote.
-- `linux/MANIFEST.sha256` fixa a integridade byte-a-byte de todos os arquivos preservados.
-- Baixar `linux/` é suficiente para instalar, validar e executar a v5.23; o ZIP original não é necessário para uso.
+- `linux/app/` preserva a distribuição completa expandida diretamente do pacote homologado.
+- `linux/MANIFEST.sha256` fixa a integridade byte-a-byte da árvore preservada.
 - A referência Linux permanece imutável durante a migração Android salvo decisão explícita de nova baseline.
 
 ## Android
@@ -29,72 +27,97 @@ Linha atual: **6.0.0-alpha1**.
 ### Domínio/UI já portados
 
 - projeto nativo Kotlin + Jetpack Compose;
-- afinações, delta global, bloqueios de conversão e normalização textual da v5.23;
+- regras de afinação, delta global, bloqueios de conversão e normalização da v5.23;
 - **Rápida / Demucs** como separação padrão Android;
-- Alta qualidade / BS-RoFormer preservada como opção;
+- Alta qualidade / BS-RoFormer preservada como opção futura;
 - estados Ideal / Adequado / Ressalva do Pitch de Arquivo;
 - inspetor WAV nativo + inspeção complementar via FFmpeg;
-- UI responsiva do Pitch de Arquivo com SAF, escolha por afinação/semitons, Inverter, tipo de áudio e formatos de saída;
-- box de orientação DAW preservado.
+- UI responsiva do Pitch de Arquivo e da Separação via SAF.
 
-### Rubber Band R3 — implementação digital concluída
+### Rubber Band R3 / Pitch de Arquivo — gate digital concluído
 
-- Rubber Band Library `4.0.0` integrada via NDK/JNI;
-- source pin exato: `1d95888bec3ae0a17c0c4af791810d5a63f6bc35`;
-- ABI inicial: `arm64-v8a`;
-- R3/Finer explicitamente solicitado e validado por `getEngineVersion() == 3`;
-- processamento offline em duas passagens (`study` → `process`);
+- Rubber Band Library `4.0.0` via NDK/JNI;
+- source pin `1d95888bec3ae0a17c0c4af791810d5a63f6bc35`;
+- ABI inicial `arm64-v8a`;
+- R3/Finer, offline em duas passagens (`study` → `process`);
 - PCM float32 em blocos, preservando canais;
-- pitch positivo e negativo;
-- time ratio `1.0`;
-- preservação opcional de formantes para Vocal;
+- pitch positivo/negativo, time ratio `1.0` e formant preserved para Vocal;
 - cancelamento cooperativo e cleanup;
-- teste golden host executa +3 e -3 semitons em estéreo, valida frequências esperadas e tolerância de duração;
-- CI compila a mesma revisão upstream e o alvo Android NDK.
+- golden host sintético para +3/-3 semitons em estéreo;
+- pipeline SAF → FFmpeg → R3 → validação → WAV32f/WAV24/FLAC24 → SAF final;
+- preflight de armazenamento, Foreground Service, JobStore, wake lock limitado e redelivery seguro.
 
-A licença e o pin estão registrados em `android/app/src/main/cpp/THIRD_PARTY.md`. Distribuição pública/RC continua condicionada à auditoria de licenças prevista no roadmap.
+### Demucs `htdemucs_6s` — implementação digital concluída
 
-### Pitch de Arquivo — pipeline ponta a ponta implementado
+Runtime Android:
 
-Fluxo implementado:
+- `demucs.cpp` C++17 integrado via NDK/JNI;
+- source pin: `f1206e9adeea103aef4a636b9e62297cf1f8e34e`;
+- Eigen pin: `dd8c71e62852b2fe429edb6682ac91fd1c578a26`;
+- ABI inicial: `arm64-v8a`;
+- biblioteca empacotada: `libgbw_demucs.so`;
+- JNI rejeita modelo de quatro fontes e exige tensor de seis stems;
+- identidade nativa registra runtime/modelo/sample-rate/canais/stems.
+
+Checkpoint externo:
+
+- contrato: `htdemucs_6s`;
+- arquivo: `ggml-model-htdemucs-6s-f16.bin`;
+- fonte: dataset `Retrobear/demucs.cpp` no Hugging Face;
+- revisão imutável: `5f5daffffcf06ad7b27a7285da327e18ea62068a`;
+- tamanho: `54,855,129` bytes;
+- SHA-256: `09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856`;
+- modelo permanece fora do APK;
+- download usa `.part`, valida tamanho + SHA-256 e só então promove atomicamente para o cache privado;
+- CI baixa/reutiliza o checkpoint apenas após revalidar integridade e exige magic `dmc6` + nomes de tensores de arquitetura esperados.
+
+Pipeline Rápida:
 
 ```text
 SAF input
-→ inspeção/classificação
-→ Ressalva exige aceitação explícita
-→ preparação WAV float32 via FFmpeg sem -ar/-ac
-→ duas passagens Rubber Band R3
-→ validação de duração/sample rate/canais
-→ WAV 32f direto ou encode final WAV24/FLAC24
-→ FFprobe do arquivo final
-→ somente então gravação no SAF de destino
-→ cleanup dos temporários
+→ FFmpeg prepara WAV float32 estéreo 44,1 kHz
+→ modelo htdemucs_6s validado/carregado
+→ janelas nativas de 343.980 frames (7,8 s)
+→ core de 242.550 frames (5,5 s)
+→ contexto de 50.715 frames (1,15 s) em cada lado
+→ inferência 6 stems
+→ crop do core
+→ WAV float32 estéreo por stem
+→ valida sample rate/canais/frames
+→ mantém somente outputs completos
 ```
 
-Regras consolidadas:
+Ordem fixa dos seis stems:
 
-- input WAV float32 compatível usa `-c:a copy` na preparação quando possível;
-- demais entradas suportadas são decodificadas uma única vez para float32;
-- nenhum resampling/downmix é solicitado pelo pipeline;
-- sample rate e número de canais são comparados antes/depois e divergências abortam;
-- duração de pitch-only usa tolerância objetiva de 20 ms;
-- saída padrão WAV 32-bit float;
-- alternativas WAV 24-bit e FLAC 24-bit;
-- saída só é copiada para o URI final após passar nas validações;
-- falha/cancelamento limpa temporários e tenta remover/truncar o destino incompleto;
-- preflight estima espaço temporário e falha cedo quando o armazenamento interno é insuficiente.
+1. `drums`
+2. `bass`
+3. `other`
+4. `vocals`
+5. `guitar`
+6. `piano`
 
-### Background/lifecycle
+A implementação mede `elapsedMillis` e pico observado de PSS durante a execução, preserva progresso persistido e remove saída parcial em falha/cancelamento.
 
-- `ForegroundService` `mediaProcessing` é proprietário da tarefa; a Activity não é proprietária do job;
+### UI de Separação
+
+- seleção do áudio via SAF;
+- **Rápida — Demucs `htdemucs_6s`** executa o pipeline real;
+- primeiro uso informa que o modelo externo será baixado/verificado;
+- progresso e estado vêm do mesmo Foreground Service dos jobs longos;
+- cancelamento pela UI/notificação;
+- Alta qualidade / BS-RoFormer-SW e Comparar permanecem visíveis, mas não executam silenciosamente um fallback enquanto o próximo motor não estiver implementado.
+
+## Background/lifecycle
+
+- `ForegroundService` `mediaProcessing` é proprietário das tarefas pesadas;
+- Activity não é proprietária do job;
 - estado/progresso persistidos em `JobStore`;
-- cancelamento pela UI e pela notificação;
-- `PARTIAL_WAKE_LOCK` com limite de 6 h durante processamento;
-- `START_REDELIVER_INTENT` para permitir reinício seguro do pipeline após morte do processo quando o Android redeliver o Intent;
-- pipeline é idempotente no diretório temporário do `jobId`: uma retomada reinicia do começo e não reaproveita render parcial;
-- timeout de Foreground Service é persistido como interrupção.
+- cancelamento pela UI e notificação;
+- `PARTIAL_WAKE_LOCK` limitado durante processamento;
+- `START_REDELIVER_INTENT` para reinício seguro quando o Android redeliver o Intent;
+- temporários são isolados por `jobId` e saídas parciais são removidas em erro/cancelamento.
 
-### Toolchain fixado
+## Toolchain fixado
 
 - AGP `9.4.0`;
 - Gradle `9.6.0`;
@@ -107,68 +130,65 @@ Regras consolidadas:
 - NDK `27.2.12479018`;
 - CMake `3.22.1`.
 
-## CI
+## CI Android
 
-A CI Android é automática em todo push/PR e mantém `workflow_dispatch` apenas como contingência.
+A CI dispara em push/PR e mantém `workflow_dispatch` como contingência.
 
-Gates Android atuais:
+Gates atuais:
 
 1. paridade/smoke de domínio;
-2. golden host Rubber Band R3 (+3/-3, estéreo, duração);
-3. testes unitários Android;
-4. Android Lint;
-5. `assembleDebug` incluindo NDK/CMake arm64;
-6. verificação da biblioteca nativa dentro do APK;
-7. metadata/SHA-256;
-8. upload do APK debug;
-9. upload dos relatórios.
+2. golden host Rubber Band R3;
+3. checkpoint real `htdemucs_6s`: cache revalidado, tamanho, SHA-256, magic `dmc6` e tensores esperados;
+4. testes unitários Android, incluindo contratos de chunking/modelo;
+5. Android Lint;
+6. `assembleDebug` NDK/CMake arm64;
+7. verificação de `libgbw_rubberband.so` e `libgbw_demucs.so` dentro do APK;
+8. metadata/SHA-256 do APK incluindo pins do runtime e modelo;
+9. upload do APK debug e relatórios.
 
-A Linux Baseline CI valida, quando o baseline/paridade muda:
+Checkpoint funcional anterior de UI + Demucs:
 
-1. identidade da baseline e manifesto;
-2. integridade SHA-256 de toda a árvore `linux/app/`;
-3. ausência de ZIP de staging na distribuição canônica;
-4. permissões executáveis dos entrypoints/scripts;
-5. sintaxe Bash;
-6. `compileall` Python;
-7. testes core e pipeline de áudio com FFmpeg;
-8. testes GUI sob Xvfb;
-9. self-test da aplicação.
+- commit: `724a3604cf42e7a610ee8c3e19076075444ca508`;
+- Android CI run `#39`: **SUCCESS**.
 
-Checkpoint consolidado do bloco R3/Pitch de Arquivo:
+O gate adicional de checkpoint externo foi acrescentado em `f4089aa5c338154f07cdda15d432f4bbe30dd837`; consulte a CI do próprio SHA como evidência autoritativa.
 
-- commit funcional: `55f5e5e12becff31bc38028cceabca855348bf92`;
-- Android CI em `main`: run `#14`, **SUCCESS**;
-- artifact APK: `GBW-Android-debug-14`;
-- digest do artifact: `sha256:e682578df12d3826fcc317cdf94868d52d85666effdc46cdd7a75903b53fbe76`.
+## Licenças / distribuição
 
-Esse checkpoint é histórico do gate funcional Android; o HEAD de `main` pode avançar por documentação, preservação Linux ou housekeeping sem invalidá-lo.
+- `demucs.cpp`: MIT no source pin usado;
+- Eigen: família MPL-2.0 conforme upstream;
+- dataset `Retrobear/demucs.cpp`: metadata pública declara MIT e documenta a origem dos pesos convertidos;
+- Rubber Band continua sendo o principal gate de licença antes de RC/distribuição pública: GPL v2-or-later ou licença comercial apropriada.
+
+Detalhes: `android/app/src/main/cpp/THIRD_PARTY.md`.
 
 ## O que ainda NÃO está homologado
 
-A implementação digital acima não equivale a homologação física completa. Permanecem para dispositivo Android real/percepção humana:
+A implementação digital não equivale a homologação física completa. Permanecem para dispositivo Android arm64 real/percepção humana:
 
-- execução JNI/R3 real no aparelho e avaliação auditiva final;
-- estabilidade com Home/outro app/tela bloqueada por períodos longos;
-- comportamento do provider SAF específico do aparelho/nuvem em cancelamento e falha;
-- thermal throttling, consumo de bateria e RAM real;
-- ergonomia e notificações no hardware alvo.
+- inferência Demucs completa no aparelho alvo com música real;
+- avaliação auditiva dos seis stems e continuidade nas fronteiras de chunks;
+- RAM/PSS real, thermal throttling, tempo, bateria e estabilidade prolongada;
+- execução com Home/outro app/tela bloqueada;
+- providers SAF reais em cancelamento/falha;
+- execução JNI/R3 e percepção auditiva final do Pitch de Arquivo.
 
 Também permanecem como gates de desenvolvimento:
 
-- Demucs `htdemucs_6s` real no Android arm64 com seis stems;
-- BS-RoFormer-SW real no Android;
+- **BS-RoFormer-SW real no Android**;
+- modo Comparar executando os dois motores;
 - workflow completo Fonte → Separação → Afinação → Exportação;
-- projetos/backup/restore cross-platform completos;
-- release assinado e homologação final.
+- shared gain/exportação final;
+- projetos/backup/restore cross-platform;
+- hardening, auditoria de licenças, release assinado e homologação final.
 
 ## Próximo gate
 
-1. **Demucs `htdemucs_6s` real em Android arm64**, preservando seis stems `drums`, `bass`, `other`, `vocals`, `guitar`, `piano`;
-2. definir e provar runtime, checkpoint/hash/licença, segmentação, RAM e cancelamento;
-3. depois integrar BS-RoFormer-SW;
-4. seguir o roadmap funcional sem regredir o Pitch de Arquivo.
+1. integrar e provar **BS-RoFormer-SW / Alta qualidade** no Android, mantendo modelos grandes fora do APK;
+2. definir runtime, pesos/version/hash/licença, RAM, segmentação e cancelamento;
+3. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
+4. depois seguir Fonte/download e o workflow completo, sem regredir Pitch de Arquivo nem Demucs.
 
 ## Continuidade
 
-O prompt oficial para outro chat está em `docs/ANDROID_HANDOFF_PROMPT.md`. Toda nova sessão deve confirmar HEAD remoto e CI real antes de escrever; nenhum SHA de handoff é autoritativo se o repositório tiver avançado.
+O prompt oficial para outro chat está em `docs/ANDROID_HANDOFF_PROMPT.md`. Toda nova sessão deve confirmar HEAD remoto e CI real antes de escrever; SHAs documentados são checkpoints, não substituem a leitura do estado remoto atual.

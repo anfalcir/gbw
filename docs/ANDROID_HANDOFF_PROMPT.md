@@ -25,8 +25,8 @@ NÃO pare em análise ou planejamento. Continue executando diretamente no GitHub
 ANTES DE ESCREVER:
 
 1. confirme HEAD remoto de `main` e `dev/android-6.0`;
-2. confirme que a dev descende do main e não há avanço concorrente;
-3. leia integralmente:
+2. confirme que não há avanço concorrente relevante;
+3. leia:
    - `README.md`
    - `AGENTS.md`
    - `linux/BASELINE.md`
@@ -36,26 +36,27 @@ ANTES DE ESCREVER:
    - `docs/DEVELOPMENT_WORKFLOW.md`
    - `docs/CI_AUTOMATION.md`
    - `docs/ANDROID_HANDOFF_PROMPT.md`
-   - `android/README.md`;
+   - `android/README.md`
+   - `android/app/src/main/cpp/THIRD_PARTY.md`;
 4. consulte commits e Android CI recentes;
 5. confirme último run verde, jobs e artifacts.
 
 Nunca trate SHA deste handoff como autoritativo se o repositório tiver avançado.
 
 ==================================================
-1. BASELINE / REGRAS INVIOLÁVEIS
+1. REGRAS INVIOLÁVEIS
 ==================================================
 
 - GBW Linux 5.23.0 é a fonte de verdade funcional.
 - Não modifique `linux/` como efeito colateral do Android.
-- Android é reimplementação nativa; não use Python/Termux externo no produto final.
-- Divergências deliberadas Linux × Android devem ser registradas em `docs/PARITY_MATRIX.md` e `docs/CURRENT_STATE.md`.
+- Android é reimplementação nativa; sem Python/Termux externo no produto final.
+- Divergências Linux × Android devem ser registradas em `PARITY_MATRIX` e `CURRENT_STATE`.
 - Storage Access Framework é a interface de arquivos do usuário.
 - Tarefas pesadas não pertencem à Activity.
 - Foreground Service `mediaProcessing` + estado persistido é o padrão para processamento longo.
 - Separação padrão Android = **Rápida / Demucs `htdemucs_6s`**.
 - Alta qualidade = **BS-RoFormer-SW**.
-- Modelos grandes ficam fora do APK e precisam de versão/hash/licença/download/cache explícitos.
+- Modelos grandes ficam fora do APK, com versão/revisão/hash/licença/download/cache explícitos.
 
 ==================================================
 2. TOOLCHAIN FIXADA
@@ -78,7 +79,7 @@ Não altere versões por preferência.
 3. CI — AUTONOMIA OBRIGATÓRIA
 ==================================================
 
-`.github/workflows/android-ci.yml` dispara automaticamente em todo push/PR.
+`.github/workflows/android-ci.yml` dispara automaticamente em push/PR.
 
 Após TODO commit relevante:
 
@@ -86,129 +87,130 @@ commit/push
 → localizar run do SHA
 → consultar jobs
 → aguardar conclusão
-→ se falhar, abrir logs do job exato
+→ se falhar, investigar o job/step exato
 → corrigir a causa real
 → novo commit
 → repetir até verde
 → conferir artifacts
 
-Nunca peça ao usuário para rodar/rerodar Actions.
-Não use rerun cego, continue-on-error, remoção de lint/testes ou enfraquecimento de gates.
+Não use rerun cego, continue-on-error ou remoção de gates.
 
-Gates atuais incluem:
+Gates esperados:
 
 - domain parity smoke;
 - Rubber Band R3 host golden smoke;
+- checkpoint real Demucs: revisão/tamanho/SHA-256/`dmc6`/tensores;
 - unit tests;
 - Android Lint;
-- assembleDebug NDK/CMake;
-- verificação da biblioteca nativa arm64 dentro do APK;
+- assembleDebug NDK/CMake arm64;
+- `libgbw_rubberband.so` + `libgbw_demucs.so` dentro do APK;
 - metadata/SHA-256;
 - APK e relatórios como artifacts.
 
 ==================================================
-4. GATE JÁ IMPLEMENTADO — RUBBER BAND R3
+4. GATE CONCLUÍDO — RUBBER BAND R3 / PITCH DE ARQUIVO
 ==================================================
 
-Confirme no repositório antes de confiar, mas o estado esperado é:
+Confirme no repositório, mas o estado esperado inclui:
 
-- Rubber Band Library `4.0.0`;
-- source commit fixado `1d95888bec3ae0a17c0c4af791810d5a63f6bc35`;
-- ABI inicial `arm64-v8a`;
-- R3/Finer, `getEngineVersion() == 3`;
-- offline duas passagens `study`/`process`;
-- float32 streaming em blocos;
-- time ratio 1.0;
-- pitch +N/-N;
-- formant preserved para Vocal;
+- Rubber Band `4.0.0` @ `1d95888bec3ae0a17c0c4af791810d5a63f6bc35`;
+- R3/Finer, ABI `arm64-v8a`;
+- offline `study`/`process`;
+- float32 em blocos, time ratio 1.0, +N/-N;
+- formantes preservados para Vocal;
 - cancelamento/cleanup;
-- teste golden host em estéreo para +3/-3 semitons e duração;
-- dependência/licença documentada em `android/app/src/main/cpp/THIRD_PARTY.md`.
+- golden host estéreo +3/-3;
+- SAF input → FFmpeg → R3 → validação → WAV32f/WAV24/FLAC24 → SAF final;
+- preflight de espaço, Foreground Service, JobStore, wake lock e redelivery.
 
-Não declare distribuição pública liberada sem fechar a auditoria de licença Rubber Band prevista no roadmap.
-
-==================================================
-5. GATE JÁ IMPLEMENTADO — PITCH DE ARQUIVO E2E
-==================================================
-
-Estado esperado:
-
-SAF input
-→ inspeção Ideal/Adequado/Ressalva
-→ Ressalva pede somente `Escolher outro arquivo` / `Continuar mesmo assim`
-→ FFmpeg prepara WAV float32 mantendo sample rate/canais
-→ R3 em duas passagens
-→ valida duração/sample rate/canais
-→ WAV 32f padrão ou WAV24/FLAC24
-→ FFprobe final
-→ copia para SAF de destino apenas após validação
-→ cleanup
-
-Também esperado:
-
-- conversão por afinação ou semitons;
-- Inverter;
-- bloqueio de conversão global impossível;
-- Instrumento/Mix;
-- Vocal com formantes;
-- ausência de `-ar`/`-ac` no caminho normal;
-- output temporário antes do destino;
-- cancelamento UI/notificação;
-- preflight de espaço temporário;
-- Foreground Service com progresso persistido;
-- PARTIAL_WAKE_LOCK limitado;
-- START_REDELIVER_INTENT para reinício seguro do pipeline após morte do processo quando o Android redeliver o Intent.
-
-A implementação digital NÃO substitui homologação em hardware para áudio final, thermal/bateria, lock-screen prolongado e providers SAF reais.
+Rubber Band continua com gate de licença antes de RC/distribuição pública: GPL v2-or-later ou licença comercial apropriada.
 
 ==================================================
-6. PRÓXIMO GATE — DEMUCS `htdemucs_6s`
+5. GATE CONCLUÍDO DIGITALMENTE — DEMUCS `htdemucs_6s`
 ==================================================
 
-Este é o próximo gate principal. Não volte a construir telas antes de atacar o runtime/modelo.
+Estado esperado, sempre revalidando no repo:
 
-É obrigatório preservar o modelo de seis stems:
+Runtime:
 
-- drums
-- bass
-- other
-- vocals
-- guitar
-- piano
+- `demucs.cpp` @ `f1206e9adeea103aef4a636b9e62297cf1f8e34e`;
+- Eigen @ `dd8c71e62852b2fe429edb6682ac91fd1c578a26`;
+- C++17/NDK/JNI, `arm64-v8a`;
+- `libgbw_demucs.so` dentro do APK;
+- JNI rejeita 4-source e exige saída `[6,2,frames]` finita.
 
-Objetivos:
+Checkpoint:
 
-1. escolher/provar um runtime Android arm64 real;
-2. fixar origem do modelo, versão, hash e licença;
-3. manter modelo grande fora do APK;
-4. implementar download/cache/validação de hash de forma segura;
-5. provar shapes/entrada/saída e ordem dos seis stems;
-6. implementar segmentação/overlap compatíveis com memória móvel;
-7. evitar resampling desnecessário; documentar quando 44.1 kHz for exigência do modelo;
-8. implementar cancelamento e cleanup;
-9. medir programaticamente tempo/RAM quando possível;
-10. validar paridade objetiva possível com a baseline v5.23;
-11. somente depois levar thermal/bateria/GPU real para homologação física.
+- `ggml-model-htdemucs-6s-f16.bin`;
+- Hugging Face `Retrobear/demucs.cpp`;
+- revisão `5f5daffffcf06ad7b27a7285da327e18ea62068a`;
+- `54,855,129` bytes;
+- SHA-256 `09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856`;
+- magic `dmc6`;
+- fora do APK;
+- `.part` → validação → promoção atômica para cache privado;
+- CI valida o checkpoint externo real.
 
-Não troque silenciosamente `htdemucs_6s` por um modelo inferior. Se o runtime exigir export/conversão (ONNX/ExecuTorch etc.), preserve os mesmos pesos/arquitetura funcional e crie uma cadeia reproduzível de conversão + teste de correlação/paridade.
+Áudio/chunking:
+
+- preparação float32 estéreo 44,1 kHz;
+- window 343.980 frames / 7,8 s;
+- core 242.550 / 5,5 s;
+- contexto 50.715 / 1,15 s por lado;
+- stems fixos: drums, bass, other, vocals, guitar, piano;
+- seis WAVs float32 estéreo validados por sample rate/canais/frames;
+- cancelamento/cleanup;
+- métricas `elapsedMillis` e pico PSS observado;
+- UI Rápida ligada ao Foreground Service real.
+
+Ainda NÃO chame isso de homologação física. Exigem aparelho real:
+
+- música real e avaliação auditiva dos seis stems;
+- seams entre chunks;
+- RAM/PSS, tempo, thermal throttling e bateria;
+- Home/outro app/tela bloqueada;
+- providers SAF reais.
 
 ==================================================
-7. DEPOIS DO DEMUCS
+6. PRÓXIMO GATE PRINCIPAL — BS-ROFORMER-SW
 ==================================================
 
-- BS-RoFormer-SW / Alta qualidade;
+Agora o foco principal é **Alta qualidade / BS-RoFormer-SW**.
+
+Objetivos obrigatórios:
+
+1. identificar e provar runtime Android arm64 real;
+2. fixar origem dos pesos, revisão/version, tamanho, SHA-256 e licença;
+3. manter pesos grandes fora do APK;
+4. implementar download/cache/validação atômica equivalente ao Demucs;
+5. provar shapes, sample rate, canais e ordem/semântica dos outputs;
+6. implementar segmentação/overlap com RAM móvel limitada;
+7. implementar cancelamento e cleanup;
+8. instrumentar tempo e PSS/RAM programaticamente;
+9. adicionar gates CI objetivos para runtime/modelo;
+10. integrar a opção **Alta qualidade** na UI sem fallback silencioso;
+11. somente depois implementar **Comparar as duas**, reaproveitando preparação/I/O quando seguro.
+
+Não reduza silenciosamente o modelo ou troque por outro motor apenas para facilitar Android. Qualquer conversão de formato/runtime precisa de cadeia reproduzível e teste de correlação/paridade.
+
+==================================================
+7. DEPOIS DO BS-ROFORMER
+==================================================
+
+- modo Comparar;
 - Fonte/download;
-- Separação integrada;
+- workflow Separação integrado;
 - Afinação & Pitch do workflow;
 - Exportação/shared gain;
 - Projetos;
 - backup/restore cross-platform;
 - hardening;
+- auditoria final de licenças;
 - RC assinado;
 - homologação física final;
 - Android 6.0.0.
 
-Siga `docs/ANDROID_MIGRATION_PLAN.md` e não pule gates de alto risco apenas para avançar visualmente a UI.
+Siga `docs/ANDROID_MIGRATION_PLAN.md`; não pule gates de alto risco para avançar visualmente a UI.
 
 ==================================================
 8. DEFINITION OF DONE
@@ -221,8 +223,8 @@ Um bloco só fecha quando:
 - CI automática está verde;
 - artifact foi verificado quando aplicável;
 - regressões foram avaliadas;
-- CURRENT_STATE/PARITY foram atualizados quando pertinente;
-- limitações físicas foram claramente separadas das digitais.
+- CURRENT_STATE/PARITY/THIRD_PARTY foram atualizados quando pertinente;
+- limitações físicas estão separadas das digitais.
 
-Comece pela confirmação do estado remoto real e prossiga imediatamente no próximo gate pendente.
+Comece confirmando estado remoto real e prossiga imediatamente do próximo gate pendente.
 ```
