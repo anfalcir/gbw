@@ -6,9 +6,9 @@ Repositório oficial do **Guitar Backing Wizard**, organizado por plataforma par
 
 ```text
 gbw/
-├── linux/                  # referência congelada do GBW Linux 5.23
+├── linux/                  # âncora imutável do GBW Linux 5.23
 │   ├── BASELINE.md         # identidade, versão e SHA-256 autoritativos
-│   └── app/                # fonte autoritativa do baseline
+│   └── README.md           # política do baseline Linux
 ├── android/                # aplicação Android nativa — linha 6.x
 │   ├── app/                # módulo Android
 │   ├── scripts/
@@ -25,6 +25,7 @@ O comportamento de referência é **GBW Linux 5.23.0**.
 - Pacote autoritativo: `Guitar_Backing_Wizard_v5.23_Linux.zip`
 - SHA-256: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`
 - `linux/BASELINE.md` registra formalmente essa identidade.
+- O pacote binário/fonte empacotado **não é presumido como presente no Git**; quando for necessário inspecioná-lo, deve-se usar uma cópia que bata exatamente com o SHA-256 acima.
 - O desenvolvimento Android não altera o baseline Linux como efeito colateral.
 
 ## Android
@@ -41,7 +42,8 @@ Stack e decisões consolidadas:
 - `ForegroundService` para processamento prolongado;
 - **Separação Rápida / Demucs** como padrão Android;
 - Alta qualidade / BS-RoFormer preservada como opção;
-- Pitch de Arquivo como primeiro fluxo DSP de paridade;
+- Rubber Band R3 via NDK/JNI já integrado no checkpoint atual;
+- Pitch de Arquivo como primeiro fluxo DSP ponta a ponta;
 - projetos/backups preparados para interoperabilidade Linux ↔ Android;
 - produto final sem Termux ou Python externo.
 
@@ -57,12 +59,11 @@ Branches temporárias antigas não são referência de desenvolvimento e devem s
 A CI Android é **100% automática por commit/push em qualquer branch**:
 
 - cada push dispara `.github/workflows/android-ci.yml`;
-- o agente deve consultar autonomamente run, jobs e logs;
-- gates: smoke de domínio, unit tests, Android Lint e `assembleDebug`;
-- quando verde, o workflow publica APK debug + SHA-256/metadata como artifact;
+- o agente deve consultar autonomamente run, jobs, logs e artifacts;
+- gates atuais: smoke de domínio, golden Rubber Band R3, unit tests, Android Lint, `assembleDebug`, verificação nativa do APK, metadata/SHA-256 e artifacts;
 - `workflow_dispatch` é apenas contingência, não o fluxo normal.
 
-O primeiro checkpoint Android consolidado já atingiu build verde com APK debug gerado em CI. Novos chats devem sempre confirmar o HEAD e o run mais recente antes de escrever.
+Novos chats devem sempre confirmar o HEAD e o run mais recente antes de escrever.
 
 ## Documentação autoritativa
 
