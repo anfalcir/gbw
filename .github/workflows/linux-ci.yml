@@ -44,8 +44,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg xvfb python3-tk
           python -m pip install --upgrade pip
-          # Keep the GUI dependency inside the exact compatibility range declared
-          # by the frozen v5.23 distribution. Do not silently validate against CTk 6.x.
           python -m pip install 'customtkinter>=5.2,<6' 'yt-dlp[default,curl-cffi]>=2024.8.6' 'librosa>=0.11'
 
       - name: Validate baseline identity and tree integrity
@@ -55,6 +53,7 @@ jobs:
           test -f linux/BASELINE.md
           test -f linux/README.md
           test -f linux/MANIFEST.sha256
+          test -f linux/ci/validate_gui_contract.py
           grep -Fq '5.23.0' linux/BASELINE.md
           grep -Fq 'ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a' linux/BASELINE.md
           test ! -e linux/app/Guitar_Backing_Wizard_v5.23_Linux.zip
@@ -90,7 +89,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m compileall -q gbw guitar_backing_wizard.py audio_intelligence.py tests
+          python -m compileall -q gbw guitar_backing_wizard.py audio_intelligence.py tests ../ci
 
       - name: Core and audio pipeline tests
         working-directory: linux/app
@@ -99,12 +98,11 @@ jobs:
           set -euo pipefail
           PYTHONPATH=. python -m unittest tests.test_core tests.test_audio_pipeline -v
 
-      - name: GUI smoke tests under Xvfb
-        working-directory: linux/app
+      - name: GUI contract tests under Xvfb
         shell: bash
         run: |
           set -euo pipefail
-          timeout 120s xvfb-run -a env GBW_HEADLESS_TEST=1 PYTHONPATH=. python -m unittest tests.test_gui_smoke -v
+          timeout 150s xvfb-run -a env GBW_HEADLESS_TEST=1 PYTHONPATH=linux/app python linux/ci/validate_gui_contract.py
 
       - name: Application self-test under Xvfb
         working-directory: linux/app

@@ -59,7 +59,7 @@ Roda automaticamente quando `linux/**`, `docs/PARITY_MATRIX.md` ou o próprio wo
 
 Gates obrigatórios:
 
-1. presença de `linux/README.md`, `linux/BASELINE.md` e `linux/MANIFEST.sha256`;
+1. presença de `linux/README.md`, `linux/BASELINE.md`, `linux/MANIFEST.sha256` e do validador CI;
 2. identidade `5.23.0` e SHA-256 do pacote de origem;
 3. `sha256sum -c linux/MANIFEST.sha256` sobre toda a distribuição expandida;
 4. ausência de ZIP de staging em `linux/app/`;
@@ -67,7 +67,9 @@ Gates obrigatórios:
 6. `bash -n` nos scripts shell;
 7. `python -m compileall`;
 8. testes `test_core` e `test_audio_pipeline` com FFmpeg;
-9. `test_gui_smoke` em Xvfb;
+9. GUI sob Xvfb: todos os testes congelados não acoplados à implementação interna de `CTkScrollableFrame` + equivalentes semânticos para os três contratos de geometria em `linux/ci/validate_gui_contract.py`;
 10. self-test da aplicação em Xvfb.
+
+A CI não edita nem adapta `linux/app/`: o manifesto continua cobrindo a distribuição v5.23 byte-a-byte. O adaptador de CI existe fora de `app/` apenas para evitar que detalhes internos do CustomTkinter (`Canvas` do scrollable frame) sejam confundidos com falhas funcionais de layout.
 
 A Linux CI não instala Demucs ou BS-RoFormer completos apenas para validar o baseline: esses componentes pesados são testados por interfaces/mocks onde apropriado; o objetivo deste workflow é provar preservação, importabilidade e regressão funcional do pacote congelado sem transformar a CI em download de modelos/pesos.

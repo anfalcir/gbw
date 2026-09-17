@@ -66,8 +66,10 @@ Gates:
 - `compileall` Python;
 - testes unitários/core;
 - testes do pipeline de áudio com FFmpeg;
-- testes GUI em Xvfb;
+- testes GUI em Xvfb, preservando intacta a suite congelada e validando separadamente os três contratos de geometria de `CTkScrollableFrame` por meio de `linux/ci/validate_gui_contract.py`;
 - self-test da aplicação em Xvfb.
+
+`linux/app/` não é modificado para acomodar diferenças de runner, toolkit ou CI. Qualquer adaptação de harness fica em `linux/ci/`, fora do manifesto da distribuição congelada.
 
 O workflow instala apenas dependências mínimas necessárias à validação. Modelos ML pesados/venvs persistentes não entram no Git nem são tratados como parte da integridade byte-a-byte da distribuição.
 
