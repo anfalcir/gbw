@@ -153,6 +153,7 @@ target_include_directories(
     gbw_pffft
     PUBLIC
     ${pffft_gbw_SOURCE_DIR}/include
+    ${pffft_gbw_SOURCE_DIR}/include/pffft
     PRIVATE
     ${pffft_gbw_SOURCE_DIR}/src
 )
