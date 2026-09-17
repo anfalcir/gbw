@@ -76,6 +76,20 @@ jobs:
             --index-url https://download.pytorch.org/whl/cpu \
             'torch==2.12.1+cpu'
           python -m pip install 'executorch==1.3.1'
+          # Install the inference package dependencies explicitly so the source
+          # can be installed with --no-deps without giving pip permission to
+          # replace the torch ABI pin above.
+          python -m pip install \
+            'numpy>=2.0' \
+            'soundfile>=0.12' \
+            'ml-collections>=0.1.1' \
+            'tqdm>=4.64' \
+            'beartype>=0.14' \
+            'rotary-embedding-torch>=0.3.5' \
+            'einops>=0.6.1' \
+            'PyYAML>=6.0' \
+            'requests>=2.31' \
+            'packaging>=24.2'
           # Keep the exact 0.1.5 source revision used by the Linux baseline.
           python -m pip install --force-reinstall --no-deps \
             'git+https://github.com/openmirlab/bs-roformer-infer.git@244cddd4f7611956eb1cc4958e82b65b4891c019'
