@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -203,7 +202,6 @@ private fun SeparationScreen() {
 @Composable
 private fun FilePitchScreen() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var uriText by rememberSaveable { mutableStateOf("") }
     var inspection by remember { mutableStateOf<AudioInspection?>(null) }
     var inspectionError by remember { mutableStateOf<String?>(null) }
