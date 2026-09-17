@@ -1,0 +1,124 @@
+name: BS-RoFormer Exact Gate
+
+on:
+  push:
+    branches:
+      - dev/android-6.0
+    paths:
+      - 'android/tools/bs_roformer_exact_gate.py'
+      - '.github/workflows/bs-roformer-exact-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BSR_CACHE_DIR: /home/runner/.cache/gbw-bs-roformer-sw
+  BSR_MODEL_REV: a443a2985534b3bc815ef54a5d446c6a0390f974
+  BSR_CKPT_SHA256: 24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e
+  BSR_CKPT_BYTES: '699412152'
+  BSR_CONFIG_SHA256: f9fada9f94e5ba2d2e4600196299459294bc5f532b314c209cc156ac63e4329b
+  BSR_CONFIG_BYTES: '4613'
+
+jobs:
+  exact-gate:
+    name: Exact checkpoint + ExecuTorch/XNNPACK gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache verified BS-RoFormer assets
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.BSR_CACHE_DIR }}
+          key: bsr-sw-${{ env.BSR_CKPT_SHA256 }}-${{ env.BSR_CONFIG_SHA256 }}
+
+      - name: Download and verify exact model assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$BSR_CACHE_DIR"
+          ckpt="$BSR_CACHE_DIR/BS-Rofo-SW-Fixed.ckpt"
+          config="$BSR_CACHE_DIR/BS-Rofo-SW-Fixed.yaml"
+          base="https://huggingface.co/enerjazzer/BS-ROFO-SW-Fixed/resolve/$BSR_MODEL_REV"
+
+          verify_ckpt() {
+            [[ -f "$ckpt" ]] &&
+            [[ "$(stat -c%s "$ckpt")" == "$BSR_CKPT_BYTES" ]] &&
+            echo "$BSR_CKPT_SHA256  $ckpt" | sha256sum -c -
+          }
+          verify_config() {
+            [[ -f "$config" ]] &&
+            [[ "$(stat -c%s "$config")" == "$BSR_CONFIG_BYTES" ]] &&
+            echo "$BSR_CONFIG_SHA256  $config" | sha256sum -c -
+          }
+
+          if ! verify_ckpt; then
+            rm -f "$ckpt" "$ckpt.part"
+            curl --fail --location --retry 5 --retry-delay 2 \
+              "$base/BS-Rofo-SW-Fixed.ckpt?download=true" \
+              -o "$ckpt.part"
+            [[ "$(stat -c%s "$ckpt.part")" == "$BSR_CKPT_BYTES" ]]
+            echo "$BSR_CKPT_SHA256  $ckpt.part" | sha256sum -c -
+            mv "$ckpt.part" "$ckpt"
+          fi
+
+          if ! verify_config; then
+            rm -f "$config" "$config.part"
+            curl --fail --location --retry 5 --retry-delay 2 \
+              "$base/BS-Rofo-SW-Fixed.yaml?download=true" \
+              -o "$config.part"
+            [[ "$(stat -c%s "$config.part")" == "$BSR_CONFIG_BYTES" ]]
+            echo "$BSR_CONFIG_SHA256  $config.part" | sha256sum -c -
+            mv "$config.part" "$config"
+          fi
+
+          verify_ckpt
+          verify_config
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install pinned compiler toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'executorch==1.3.1'
+          python -m pip install \
+            'git+https://github.com/openmirlab/bs-roformer-infer.git@244cddd4f7611956eb1cc4958e82b65b4891c019'
+          python -m pip freeze > bs-roformer-exact-freeze.txt
+
+      - name: Run exact checkpoint/compiler gate
+        working-directory: android
+        shell: bash
+        run: |
+          python tools/bs_roformer_exact_gate.py \
+            --checkpoint "$BSR_CACHE_DIR/BS-Rofo-SW-Fixed.ckpt" \
+            --config "$BSR_CACHE_DIR/BS-Rofo-SW-Fixed.yaml"
+
+      - name: Publish exact gate summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f android/bs-roformer-exact-gate.md ]]; then
+            cat android/bs-roformer-exact-gate.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload exact gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BS-RoFormer-exact-gate-${{ github.run_number }}
+          path: |
+            android/bs-roformer-exact-gate.json
+            android/bs-roformer-exact-gate.md
+            bs-roformer-exact-freeze.txt
+          if-no-files-found: warn
+          retention-days: 30
