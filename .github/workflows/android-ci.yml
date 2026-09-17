@@ -76,6 +76,16 @@ jobs:
         working-directory: android
         run: gradle --no-daemon --stacktrace assembleDebug
 
+      - name: Verify native APK contents
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_rubberband.so"
+          echo "APK_NATIVE_R3_OK"
+
       - name: Generate build metadata
         id: metadata
         working-directory: android
