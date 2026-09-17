@@ -16,7 +16,7 @@ jobs:
   probe:
     name: Probe PyTorch to ExecuTorch
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -38,17 +38,60 @@ jobs:
             'git+https://github.com/openmirlab/bs-roformer-infer.git@244cddd4f7611956eb1cc4958e82b65b4891c019'
           python -m pip freeze > bs-roformer-probe-freeze.txt
 
-      - name: Run export feasibility probe
+      - name: Probe real-valued core first
         working-directory: android
-        run: python tools/bs_roformer_export_probe.py
+        run: python tools/bs_roformer_export_probe.py --scope core
 
-      - name: Publish probe summary
+      - name: Probe full waveform graph with hard timeout
+        working-directory: android
+        shell: bash
+        run: |
+          set -uo pipefail
+          if timeout 300s python tools/bs_roformer_export_probe.py --scope full; then
+            exit 0
+          fi
+          status=$?
+          if [[ "$status" -ne 124 ]]; then
+            exit "$status"
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = {
+              "purpose": "BS-RoFormer Android export feasibility; not a release gate",
+              "scope": "full",
+              "timed_out": True,
+              "timeout_seconds": 300,
+              "stages": {
+                  "full_torch_export": {
+                      "ok": False,
+                      "error_type": "Timeout",
+                      "error": "Full waveform torch.export exceeded the 300 s diagnostic budget."
+                  }
+              }
+          }
+          Path("bs-roformer-export-probe-full.json").write_text(
+              json.dumps(report, indent=2), encoding="utf-8"
+          )
+          Path("bs-roformer-export-probe-full.md").write_text(
+              "# BS-RoFormer export probe — full\n\n"
+              "- Result: **TIMEOUT** after 300 seconds.\n"
+              "- Core evidence remains authoritative for the runtime-seam decision.\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Publish probe summaries
         if: always()
         shell: bash
         run: |
-          if [[ -f android/bs-roformer-export-probe.md ]]; then
-            cat android/bs-roformer-export-probe.md >> "$GITHUB_STEP_SUMMARY"
-          fi
+          for summary in android/bs-roformer-export-probe-core.md android/bs-roformer-export-probe-full.md; do
+            if [[ -f "$summary" ]]; then
+              cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+              printf '\n\n' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
 
       - name: Upload probe evidence
         if: always()
@@ -56,8 +99,10 @@ jobs:
         with:
           name: BS-RoFormer-export-probe-${{ github.run_number }}
           path: |
-            android/bs-roformer-export-probe.json
-            android/bs-roformer-export-probe.md
+            android/bs-roformer-export-probe-core.json
+            android/bs-roformer-export-probe-core.md
+            android/bs-roformer-export-probe-full.json
+            android/bs-roformer-export-probe-full.md
             bs-roformer-probe-freeze.txt
           if-no-files-found: warn
           retention-days: 30
