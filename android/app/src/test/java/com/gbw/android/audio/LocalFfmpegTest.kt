@@ -18,4 +18,17 @@ class LocalFfmpegTest {
     fun blankOutputHasNoDetail() {
         assertNull(LocalFfmpeg.compactDetail("   \n"))
     }
+
+    @Test
+    fun missingRuntimeClassKeepsTheClassDescriptorInTheDiagnostic() {
+        val error =
+            NoClassDefFoundError(
+                "Failed resolution of: Lcom/arthenica/smartexception/java/Exceptions;"
+            )
+        assertEquals(
+            "NoClassDefFoundError: Failed resolution of: " +
+                "Lcom/arthenica/smartexception/java/Exceptions;",
+            LocalFfmpeg.throwableDetail(error),
+        )
+    }
 }

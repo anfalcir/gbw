@@ -24,7 +24,7 @@ internal object LocalFfmpeg {
                 throw error
             } catch (error: Throwable) {
                 throw IllegalStateException(
-                    "$errorMessage (${error::class.java.simpleName})",
+                    "$errorMessage • ${throwableDetail(error)}",
                     error,
                 )
             }
@@ -47,11 +47,26 @@ internal object LocalFfmpeg {
                 throw error
             } catch (error: Throwable) {
                 throw IllegalStateException(
-                    "$errorMessage (${error::class.java.simpleName})",
+                    "$errorMessage • ${throwableDetail(error)}",
                     error,
                 )
             }
         }
+
+    internal fun throwableDetail(error: Throwable, maxDepth: Int = 4): String {
+        val parts = mutableListOf<String>()
+        var current: Throwable? = error
+        var depth = 0
+        while (current != null && depth < maxDepth.coerceAtLeast(1)) {
+            val type = current::class.java.simpleName.ifBlank { current::class.java.name }
+            val message = current.message?.replace('\n', ' ')?.trim()?.takeIf { it.isNotBlank() }
+            val item = if (message == null) type else "$type: $message"
+            if (parts.lastOrNull() != item) parts += item
+            current = current.cause
+            depth += 1
+        }
+        return parts.joinToString(" <- ").take(520)
+    }
 
     internal fun compactDetail(output: String?, maxChars: Int = 320): String? {
         val compact =
