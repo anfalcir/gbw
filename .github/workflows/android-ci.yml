@@ -107,7 +107,7 @@ jobs:
           test -x "$APKSIGNER"
           OUTPUT="$("$APKSIGNER" verify --print-certs "$APK")"
           printf '%s\n' "$OUTPUT"
-          ACTUAL="$(printf '%s\n' "$OUTPUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          ACTUAL="$(printf '%s\n' "$OUTPUT" | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           test -n "$ACTUAL"
           if [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "Unexpected APK signing certificate: $ACTUAL" >&2
