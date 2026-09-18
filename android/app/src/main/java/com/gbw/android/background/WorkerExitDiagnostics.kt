@@ -5,6 +5,7 @@ import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
 import android.os.Debug
+import androidx.annotation.RequiresApi
 
 internal object WorkerExitDiagnostics {
     private const val MEDIA_PROCESS_SUFFIX = ":media"
@@ -74,6 +75,7 @@ internal object WorkerExitDiagnostics {
             else -> "saída do processo (motivo $reason)"
         }
 
+    @RequiresApi(30)
     private fun latestWorkerExit(context: Context, since: Long): ApplicationExitInfo? {
         val manager = context.getSystemService(ActivityManager::class.java)
         val expectedProcess = context.packageName + MEDIA_PROCESS_SUFFIX
@@ -85,6 +87,7 @@ internal object WorkerExitDiagnostics {
             .maxByOrNull { it.timestamp }
     }
 
+    @RequiresApi(30)
     private fun diagnosticMessage(exit: ApplicationExitInfo): String {
         val summary =
             exit.processStateSummary
