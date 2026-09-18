@@ -26,3 +26,6 @@ Durable source/stem/export files use relative path, size, mtime and SHA-256. SHA
 
 ## Legacy migration
 PreparedSourceStore, SeparationResultStore and jobs/<jobId> remain compatibility inputs. Migration creates one UUID, copies validated artifacts, writes project.json and only then writes an idempotent migration marker.
+
+## Validation note
+The alpha11 source gate includes explicit compilation coverage for legacy migration and project-path validation.
