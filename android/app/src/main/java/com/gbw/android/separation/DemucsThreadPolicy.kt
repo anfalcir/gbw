@@ -7,7 +7,7 @@ package com.gbw.android.separation
 internal object DemucsThreadPolicy {
     const val DEFAULT_THREADS = 1
     const val OVERRIDE_PROPERTY = "gbw.demucs.blasThreads"
-    val supportedThreadCounts: Set<Int> = setOf(1, 2, 4)
+    val supportedThreadCounts: Set<Int> = setOf(1, 2)
 
     fun resolve(overrideValue: String? = System.getProperty(OVERRIDE_PROPERTY)): Int {
         val requested = overrideValue?.trim()?.toIntOrNull()

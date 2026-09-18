@@ -23,7 +23,7 @@ class DemucsContractTest {
         assertEquals(6, DemucsModelContract.stemNames.distinct().size)
         assertFalse(DemucsModelContract.RUNTIME_COMMIT.isBlank())
         assertEquals(DemucsChunking.WINDOW_FRAMES, DemucsNative.MODEL_WINDOW_FRAMES)
-        assertEquals(setOf(1, 2, 4), DemucsThreadPolicy.supportedThreadCounts)
+        assertEquals(setOf(1, 2), DemucsThreadPolicy.supportedThreadCounts)
         assertEquals(1, DemucsThreadPolicy.DEFAULT_THREADS)
         assertEquals(4_000L, DemucsRuntimeMonitor.SAMPLE_INTERVAL_MS)
     }
