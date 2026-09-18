@@ -8,8 +8,8 @@
 | Afinações suportadas | 18 | 18 | ✅ domínio |
 | Normalização de nomes | Title Case | equivalente | ✅ domínio |
 | Busca case/accent insensitive | sim | contrato portado | 🟡 UI/projetos pendente |
-| Separador padrão Linux | Alta qualidade | — | referência |
-| Separador padrão Android | — | Rápida / Demucs | ✅ decisão + pipeline |
+| Opções de separação Linux | múltiplas opções históricas | — | referência congelada; manter no Linux |
+| Separação Android | — | Demucs `htdemucs_6s` como único motor | ✅ decisão consolidada; divergência intencional |
 | Ideal/Adequado/Ressalva | sim | regras portadas | ✅ domínio/UI |
 | WAV 32f / 48 kHz | Ideal | Ideal | ✅ domínio |
 | FLAC 24-bit | Adequado | Adequado | ✅ domínio |
@@ -35,11 +35,8 @@
 | Demucs modelo fora do app | ambiente desktop | fora do APK, cache privado verificado | ✅ implementação |
 | Demucs cancelamento | sim | coroutine + native + cleanup | ✅ implementação; 🟡 aparelho |
 | Métricas Demucs | ambiente desktop | elapsed + pico PSS observado | ✅ instrumentado; 🟡 benchmark real |
-| BS-RoFormer core | Alta qualidade | ExecuTorch 1.3.1/XNNPACK + PFFFT | ✅ export/PTE/DSP/pipeline; 🟡 arm64 físico |
-| BS-RoFormer PTE | ambiente desktop | 700.284.960 bytes + SHA-256 fixo, fora do APK | ✅ artifact CI/import manager; ⚠️ hosting público bloqueado por licença |
-| BS-RoFormer chunking | overlap upstream | 588.800 / step 294.400 / fade 58.880 | ✅ unitário/golden; 🟡 seams reais |
-| BS-RoFormer outputs | 6 stems | bass/drums/other/vocals/guitar/piano | ✅ contrato/streaming; 🟡 áudio real |
-| Comparar motores | ambos | Demucs + BS-RoFormer | ⏳ após gate arm64 BS-RoFormer |
+| BS-RoFormer / Alta qualidade no Android | existe no Linux/histórico alpha8 | **não faz parte do produto Android alvo** | 🗑️ remover integralmente no próximo APK |
+| Comparar motores no Android | existe como conceito Linux/histórico | **não existe no produto Android alvo** | 🗑️ remover integralmente no próximo APK |
 | Shared gain backing/guitar | sim | mesma regra | ⏳ workflow/exportação |
 | Backup de projeto | sim | interoperável | ⏳ M3/M8 |
 | Projetos | manifest JSON | schema versionado | ⏳ M3 |

@@ -6,7 +6,7 @@
 **Plataforma-alvo:** Android  
 **Linha de versão proposta:** Android 6.x  
 **Status deste documento:** Fonte de verdade para a migração Android  
-**Data de consolidação:** 2026-09-17
+**Data de consolidação:** 2026-09-18
 
 ---
 
@@ -47,6 +47,11 @@ A implementação Android será tratada como uma **reimplementação nativa comp
 
 8. **Toda etapa crítica deve possuir testes e gate de aprovação antes de avançar.**
 
+9. **Separação Android com um único motor.**
+   - No Android, `Separação` significa exclusivamente Demucs `htdemucs_6s`.
+   - Rápida/Alta qualidade/Comparar são conceitos exclusivos da linha Linux e não fazem parte do produto Android.
+   - Não manter código morto, modelos alternativos ou infraestrutura de múltiplos motores no APK Android.
+
 ---
 
 # 3. Arquitetura-alvo
@@ -81,8 +86,7 @@ GBW Android
 │   └── DSP auxiliar
 │
 ├── ML Engine
-│   ├── Demucs / htdemucs_6s
-│   └── BS-RoFormer-SW
+│   └── Demucs / htdemucs_6s
 │
 └── Background Processing
     ├── Foreground Service
@@ -131,47 +135,30 @@ APLICATIVO
 
 # 5. Separação — decisão específica para Android
 
-## Padrão do Android
+## Motor único do Android
 
-A opção padrão no Android será:
+O Android terá **uma única função chamada Separação**.
 
-> **Rápida — recomendada no Android**
-
-Motor interno:
+Motor interno fixo:
 
 > **Demucs / htdemucs_6s**
 
-A interface apresentará:
+A interface não apresenta escolha de motor:
 
 ```text
 Separação
 
-● Rápida — recomendada no Android
-  Mais eficiente para celulares e tablets.
-
-○ Alta qualidade
-  Processamento mais pesado e demorado.
-
-○ Comparar as duas
-  Executa as duas opções para comparação.
-```
-
-## Mapeamento interno
-
-```text
-Rápida          → Demucs htdemucs_6s
-Alta qualidade  → BS-RoFormer-SW
-Comparar        → ambos
+[ Separar ]
 ```
 
 ## Regras
 
-- No primeiro uso do Android, **Rápida é o padrão**.
-- O usuário continua podendo escolher Alta qualidade.
-- A preferência escolhida pode ser persistida.
-- Nenhum formato de projeto ou exportação muda por causa dessa preferência.
-- A decisão deve ser confirmada por benchmark real durante o M1.
-- Se BS-RoFormer se mostrar suficientemente eficiente no Android, o padrão poderá ser reavaliado somente com evidência técnica.
+- Não usar os rótulos **Rápida**, **Alta qualidade** ou **Comparar** no Android.
+- Não existir preferência de motor, seletor, fallback ou modo comparação.
+- BS-RoFormer/PTE/ExecuTorch/XNNPACK e infraestrutura exclusiva desse caminho não fazem parte do produto Android e devem ser removidos integralmente.
+- A decisão é uma divergência deliberada em relação ao Linux 5.23, que permanece congelado com suas opções históricas.
+- Projetos/backups devem continuar interoperáveis no que for comum, sem exigir que o Android reproduza opções de separador que só existem no Linux.
+- Qualquer reintrodução futura de outro motor exige nova decisão explícita; não deixar scaffolding ou código morto no APK.
 
 ---
 
@@ -209,7 +196,7 @@ Exemplo:
 ```text
 GBW — Separação em andamento
 Wolves At The Gate — Enemy
-Rápida • 43%
+Separação • 43%
 Tempo decorrido: 28:14
 
 [ Abrir GBW ]   [ Cancelar ]
@@ -620,9 +607,9 @@ Validar WAV, FLAC, MP3, AAC/M4A, OGG/Opus, mono/stereo, 44,1/48/96 kHz.
 Validar +pitch, -pitch, Drop B→Drop D, Drop D→Drop B, duração, sincronismo, peak/RMS e comparação com Linux.
 
 ### M1.C — Separação
-Benchmarkar Demucs htdemucs_6s e BS-RoFormer-SW em CPU/GPU quando aplicável, RAM, tempo, temperatura, bateria e armazenamento.
+Benchmarkar Demucs `htdemucs_6s` no hardware Android real em CPU, RAM, tempo, temperatura, bateria e armazenamento.
 
-**Decisão provisória:** Demucs/Rápida é padrão Android.
+**Decisão consolidada:** Demucs `htdemucs_6s` é o único motor de separação do Android.
 
 ### M1.D — Fonte/download
 Validar busca, download, cancelamento e background.
@@ -656,7 +643,7 @@ Arquivo local, URL, pesquisa, ranking, download, preparação, cancelamento e ba
 
 ## M6 — Separação
 
-Rápida/Demucs, Alta qualidade/BS-RoFormer, Comparar, seis stems, previews, progresso, cancelamento, cleanup e jobs persistentes.
+Demucs `htdemucs_6s` como separador único, seis stems, previews, progresso, cancelamento, cleanup, exportação dos stems e job persistente.
 
 **Gate:** separação estável no dispositivo Android real.
 
@@ -807,7 +794,7 @@ Implementar estimativa de espaço e cleanup após sucesso/cancelamento/erro.
 
 # 22. Licenciamento
 
-Antes de qualquer distribuição pública do APK, auditar Rubber Band, FFmpeg, Demucs, BS-RoFormer, checkpoints/modelos, runtime ML, componentes de download e demais bibliotecas.
+Antes de qualquer distribuição pública do APK, auditar Rubber Band, FFmpeg, Demucs, checkpoint/modelo, componentes de download e demais bibliotecas efetivamente presentes no Android.
 
 ---
 
@@ -820,8 +807,8 @@ O projeto Android só está concluído quando:
 3. mantém o workflow da v5.23;
 4. Pitch de Arquivo possui paridade;
 5. projetos e backups são compatíveis;
-6. separação rápida é padrão;
-7. alta qualidade continua disponível;
+6. Separação usa exclusivamente Demucs `htdemucs_6s`;
+7. não existem no Android alternativas de motor, Alta qualidade ou Comparar;
 8. tarefas longas sobrevivem a troca de app e bloqueio de tela;
 9. cancelamento e recuperação são seguros;
 10. os resultados de áudio passam nos golden tests;

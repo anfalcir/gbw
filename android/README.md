@@ -6,13 +6,12 @@ Reimplementação Android nativa do Guitar Backing Wizard, tendo **GBW Linux 5.2
 
 Versão de desenvolvimento: `6.0.0-alpha8`.
 
-O Android já possui três fluxos DSP/ML centrais implementados digitalmente:
+O produto Android foi consolidado para dois fluxos DSP centrais:
 
 - **Pitch de Arquivo** com Rubber Band R3 via NDK/JNI;
-- **Separação Rápida** com Demucs `htdemucs_6s` via C++17/NDK/JNI;
-- **Alta qualidade** com BS-RoFormer-SW + PFFFT + ExecuTorch/XNNPACK.
+- **Separação** com Demucs `htdemucs_6s` via C++17/NDK/JNI.
 
-A linha continua alpha porque a Alta qualidade ainda precisa do gate runtime arm64 físico, além do workflow completo, projetos/backup e homologação final.
+**Decisão de produto:** Demucs é o único motor de separação do Android. O alpha8 ainda contém infraestrutura histórica de BS-RoFormer/Alta qualidade/Comparar, que deve ser removida integralmente no próximo APK. Essas opções permanecem somente na linha Linux 5.23.
 
 ## Stack fixada
 
@@ -48,9 +47,9 @@ SAF input
 
 Inclui +N/-N semitons, afinação/manual, formantes para Vocal, cancelamento, cleanup, preflight de espaço, progresso persistido, wake lock limitado e redelivery seguro.
 
-## Separação Rápida — Demucs `htdemucs_6s`
+## Separação — Demucs `htdemucs_6s`
 
-O caminho Rápida está ligado à tela de Separação e ao Foreground Service real.
+O Demucs está ligado diretamente à tela única de Separação e ao Foreground Service real.
 
 Checkpoint externo:
 
@@ -84,9 +83,9 @@ O pipeline mede tempo total, PSS durante a inferência, mediana/máximo por chun
 
 Após sucesso, a tela **Separação** lista os seis stems com **Ouvir/Parar** e oferece **Exportar os 6 stems…** via SAF para uma pasta escolhida. O alpha8 também pode recuperar os stems de uma execução alpha7 existente quando instalado por cima sem limpar os dados do app.
 
-## Alta qualidade — BS-RoFormer-SW
+## Infraestrutura histórica do alpha8 — remover no próximo APK
 
-O core exato está exportado e o pipeline Android está conectado:
+BS-RoFormer/Alta qualidade/Comparar não fazem mais parte do produto Android alvo. Os detalhes abaixo existem apenas para rastreabilidade do alpha8 até a remoção completa:
 
 - PTE: `GBW-BS-RoFormer-SW-executorch-1.3.1-T1151.pte`;
 - tamanho: `700,284,960` bytes;
@@ -97,7 +96,7 @@ O core exato está exportado e o pipeline Android está conectado:
 - STFT/ISTFT nativos, mmap, buffers diretos e overlap-add streaming;
 - seis WAVs float32 estéreo validados estruturalmente.
 
-O PTE fica fora do APK. Como a licença dos pesos upstream está declarada como desconhecida, o build não o republica nem ativa download público automático. Para desenvolvimento/homologação, a UI importa o PTE exato produzido pela CI e valida bytes/SHA-256 antes de usar.
+O próximo APK deve remover PTE, importador/manager, ExecuTorch/XNNPACK, PFFFT exclusivo desse caminho, UI, jobs, testes, dependências e gates de CI correspondentes. Não manter scaffolding ou código morto.
 
 ## Validações sem aparelho
 

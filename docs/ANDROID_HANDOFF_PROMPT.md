@@ -14,7 +14,7 @@ Você está continuando o desenvolvimento do **Guitar Backing Wizard (GBW) Andro
 - SHA-256 Linux: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`
 - Linha Android: `6.0.0-alpha*`
 
-Atue como engenheiro sênior Android/Kotlin/Compose, C++/NDK/JNI, áudio/DSP, FFmpeg, ML inference, Demucs, BS-RoFormer, Foreground Services, persistência, QA, CI/CD e release engineering.
+Atue como engenheiro sênior Android/Kotlin/Compose, C++/NDK/JNI, áudio/DSP, FFmpeg, ML inference, Demucs, Foreground Services, persistência, QA, CI/CD e release engineering.
 
 NÃO pare em análise ou planejamento. Continue executando diretamente no GitHub, com commits pequenos, rastreabilidade, testes objetivos e acompanhamento autônomo da CI. Deixe para homologação física apenas aquilo que realmente exige aparelho/percepção humana.
 
@@ -54,9 +54,11 @@ Nunca trate SHA deste handoff como autoritativo se o repositório tiver avançad
 - Storage Access Framework é a interface de arquivos do usuário.
 - Tarefas pesadas não pertencem à Activity.
 - Foreground Service `mediaProcessing` + estado persistido é o padrão para processamento longo.
-- Separação padrão Android = **Rápida / Demucs `htdemucs_6s`**.
-- Alta qualidade = **BS-RoFormer-SW**.
-- Modelos grandes ficam fora do APK, com versão/revisão/hash/licença/download/cache explícitos.
+- No Android existe **um único separador: Demucs `htdemucs_6s`**.
+- Não usar no Android os conceitos **Rápida**, **Alta qualidade**, **Comparar** ou seleção/preferência de motor.
+- BS-RoFormer/PTE/ExecuTorch/XNNPACK e toda infraestrutura exclusiva de múltiplos motores devem ser removidos no próximo APK; não manter código morto.
+- O Linux 5.23 preserva suas opções históricas e não deve ser alterado por essa decisão Android.
+- O modelo Demucs permanece fora do APK, com versão/revisão/hash/download/cache explícitos.
 
 ==================================================
 2. TOOLCHAIN FIXADA
@@ -161,7 +163,7 @@ Checkpoint:
 - seis WAVs float32 estéreo validados por sample rate/canais/frames;
 - cancelamento/cleanup;
 - métricas `elapsedMillis` e pico PSS observado;
-- UI Rápida ligada ao Foreground Service real.
+- UI de **Separação** ligada ao Foreground Service real; no estado-alvo Android não existe rótulo ou conceito de Rápida.
 
 Ainda NÃO chame isso de homologação física. Exigem aparelho real:
 
@@ -172,35 +174,29 @@ Ainda NÃO chame isso de homologação física. Exigem aparelho real:
 - providers SAF reais.
 
 ==================================================
-6. ESTADO ATUAL — BS-ROFORMER-SW / ALTA QUALIDADE
+6. PRÓXIMO BLOCO OBRIGATÓRIO — CONSOLIDAÇÃO DEMUCS-ONLY
 ==================================================
 
-O core exato já passou export/lowering para ExecuTorch/XNNPACK.
+Após concluir a homologação física do alpha8, o próximo APK deve simplificar estruturalmente a linha Android:
 
-- source `bs-roformer-infer 0.1.5` @ `244cddd4f7611956eb1cc4958e82b65b4891c019`;
-- model revision `a443a2985534b3bc815ef54a5d446c6a0390f974`;
-- checkpoint SHA-256 `24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e`;
-- config SHA-256 `52df622c95ff3c1f4e1389f476ed737581a2c2dc12324d52c9763be9ccd2be2b`;
-- PTE `GBW-BS-RoFormer-SW-executorch-1.3.1-T1151.pte`;
-- bytes `700,284,960`;
-- SHA-256 `8c3cc68404b7fadb2a41ec332b0493290d956f9490dc5c21c5120ee596807182`;
-- torch export `2.12.1+cpu`, ExecuTorch `1.3.1`, XNNPACK;
-- input `[1,2,1025,1151,2]`, output `[1,6,2050,1151,2]`;
-- Production PTE #3 / run `35289168951`: SUCCESS.
+- renomear toda UX para simplesmente **Separação**;
+- remover telas, cards, botões, textos e estados de Rápida / Alta qualidade / Comparar;
+- remover BS-RoFormer, PTE, importação/manager, ExecuTorch/XNNPACK e PFFFT se não houver outro consumidor;
+- remover actions/intents/branches do MediaProcessingService exclusivos do BS-RoFormer;
+- remover tipos de job, persistência, preferências, recursos e caminhos de storage exclusivos de múltiplos motores;
+- remover testes, scripts, workflows/gates, artifacts e metadata exclusivos do motor retirado;
+- revisar Gradle/CMake/APK para garantir que dependências e bibliotecas nativas sem uso não permaneçam empacotadas;
+- atualizar README, CURRENT_STATE, PARITY_MATRIX, THIRD_PARTY e plano de migração;
+- preservar capacidade de ouvir/exportar os seis stems Demucs;
+- não modificar `linux/`.
 
-Android implementa: SAF → float32 stereo 44.1 kHz → PTE privado validado → mmap → reflect/chunk → PFFFT STFT → XNNPACK masks → PFFFT ISTFT → overlap-add streaming → 6 stems.
-
-Alta qualidade usa Foreground Service, progresso persistido, PSS/tempo, cleanup e cancelamento cooperativo entre forwards.
-
-LICENÇA: a licença dos pesos/checkpoint permanece declarada como desconhecida. Não publique/rehoste o PTE como Release público enquanto isso não for resolvido. O build de desenvolvimento importa via SAF o artifact exato da CI e valida bytes/SHA.
-
-Próximo gate: confirmar CI verde; importar o PTE em Android arm64 real; medir mmap/XNNPACK, PSS/RAM, tempo, thermal, bateria e estabilidade; avaliar stems/seams e lifecycle; resolver licença/hosting; então implementar Comparar.
+A limpeza só fecha quando uma busca global no Android/docs ativos não encontrar referências funcionais a:
+`BS-RoFormer`, `Alta qualidade`, `Comparar`, `PTE`, `ExecuTorch` ou seleção de engine, exceto histórico explicitamente marcado como tal.
 
 ==================================================
-7. DEPOIS DO BS-ROFORMER
+7. DEPOIS DA CONSOLIDAÇÃO DEMUCS-ONLY
 ==================================================
 
-- modo Comparar;
 - Fonte/download;
 - workflow Separação integrado;
 - Afinação & Pitch do workflow;
@@ -208,12 +204,12 @@ Próximo gate: confirmar CI verde; importar o PTE em Android arm64 real; medir m
 - Projetos;
 - backup/restore cross-platform;
 - hardening;
-- auditoria final de licenças;
+- auditoria final de licenças somente do que efetivamente é distribuído no Android;
 - RC assinado;
 - homologação física final;
 - Android 6.0.0.
 
-Siga `docs/ANDROID_MIGRATION_PLAN.md`; não pule gates de alto risco para avançar visualmente a UI.
+Siga `docs/ANDROID_MIGRATION_PLAN.md`; a decisão Demucs-only supersede qualquer trecho antigo que ainda descreva múltiplos motores.
 
 ==================================================
 8. DEFINITION OF DONE

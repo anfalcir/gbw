@@ -24,14 +24,27 @@
 
 Linha atual: **6.0.0-alpha8**.
 
+### Decisão de produto — separação única no Android
+
+Decisão consolidada em 2026-09-18 após a homologação física do Demucs no tablet:
+
+- o **GBW Android terá uma única função de Separação**, usando somente **Demucs `htdemucs_6s`**;
+- no produto Android deixam de existir os conceitos **Rápida**, **Alta qualidade**, **Comparar**, seletor de motor ou preferência de separador;
+- essa simplificação é **deliberada e específica do Android** por custo computacional, tempo de processamento, complexidade operacional e manutenção em hardware móvel;
+- o **GBW Linux 5.23 permanece inalterado** e continua preservando suas opções históricas;
+- o próximo APK deve remover não apenas botões/textos, mas também toda infraestrutura Android exclusiva de múltiplos motores: BS-RoFormer/PTE, ExecuTorch/XNNPACK, PFFFT usado somente por esse caminho, importador/manager do PTE, ações/intents/branches do Foreground Service, estados de job específicos, modo Comparar, preferências, testes, scripts, gates de CI, artefatos, dependências, recursos e documentação que não tenham outro uso;
+- após a limpeza, **“Separação” = Demucs** em UI, domínio, serviços, persistência e documentação Android;
+- nenhum código morto de BS-RoFormer/Comparar deve permanecer “para talvez usar depois”; eventual retomada futura exigirá uma nova decisão explícita e uma branch/feature própria;
+- compatibilidade de projetos/backups deve tratar essa diferença como divergência de plataforma, sem tentar reintroduzir múltiplos motores no Android.
+
 ### Domínio/UI já portados
 
 - projeto nativo Kotlin + Jetpack Compose;
 - shell escuro/imersivo para Android, com safe drawing insets e conteúdo centralizado em telas largas;
 - Fonte local via SAF conectada diretamente à seleção usada pela tela de Separação;
 - regras de afinação, delta global, bloqueios de conversão e normalização da v5.23;
-- **Rápida / Demucs** como separação padrão Android;
-- Alta qualidade / BS-RoFormer preservada como opção futura;
+- no alpha8 ainda existem rótulos/infraestrutura de **Rápida / Demucs** e **Alta qualidade / BS-RoFormer**; ambos estão **deprecated para o próximo APK**;
+- estado-alvo já decidido: **Separação única = Demucs `htdemucs_6s`**;
 - estados Ideal / Adequado / Ressalva do Pitch de Arquivo;
 - inspetor WAV nativo + inspeção complementar via FFmpeg;
 - UI responsiva do Pitch de Arquivo e da Separação via SAF.
@@ -119,7 +132,7 @@ A implementação mede `elapsedMillis`, PSS amostrado também durante a chamada 
 - upgrade alpha7 → alpha8 consegue recuperar os stems privados já concluídos no alpha7, desde que o app seja atualizado por cima sem desinstalar/limpar dados;
 - Comparar permanece bloqueado até o gate runtime arm64 da Alta qualidade.
 
-## BS-RoFormer-SW — gate digital de produção
+## BS-RoFormer-SW — implementação histórica do alpha8; retirada obrigatória no próximo APK
 
 O workflow **BS-RoFormer Production PTE #3** (run `35289168951`) terminou **SUCCESS** e fixou o artifact autoritativo:
 
@@ -137,7 +150,7 @@ Pipeline Android: SAF → float32 stereo 44,1 kHz → PTE privado validado → E
 
 O manager implementa `.part`, Content-Length quando disponível, limite de bytes, cancelamento cooperativo, fsync, SHA-256, promoção atômica e cleanup. O PTE permanece fora do APK.
 
-**Licença:** o código `bs-roformer-infer` é MIT, mas o model card atual dos pesos usados declara a licença do checkpoint como desconhecida. Por isso a URL pública automática do PTE fica deliberadamente vazia e o projeto não republica o PTE derivado como Release enquanto direitos de redistribuição não forem estabelecidos. Para desenvolvimento/homologação, o artifact exato da CI pode ser importado via SAF.
+**Status atual:** este bloco permanece documentado apenas para rastreabilidade do alpha8. A linha Android não seguirá com BS-RoFormer: o próximo APK deve remover essa implementação, seus modelos, dependências, UI, jobs, testes e gates exclusivos. A licença dos pesos deixa de ser gate do produto Android após a remoção completa; o Linux permanece fora dessa decisão.
 
 ## Background/lifecycle
 
@@ -240,9 +253,8 @@ A implementação digital não equivale a homologação física completa. Perman
 
 Também permanecem como gates de desenvolvimento:
 
-- execução física arm64 do BS-RoFormer-SW, incluindo mmap/XNNPACK, PSS, tempo e thermal;
-- resolução da licença/redistribuição dos pesos/PTE antes de hosting público;
-- modo Comparar executando os dois motores;
+- remoção completa da arquitetura multi-engine do Android: BS-RoFormer/PTE, Alta qualidade, Comparar e todo código/dependência/gate sem uso após a consolidação Demucs-only;
+- revisão de APK/tamanho/dependências para confirmar que ExecuTorch/XNNPACK/PFFFT e artefatos exclusivos do BS-RoFormer desapareceram do produto;
 - workflow completo Fonte → Separação → Afinação → Exportação;
 - shared gain/exportação final;
 - projetos/backup/restore cross-platform;
@@ -268,7 +280,7 @@ Também permanecem como gates de desenvolvimento:
 6. ouvir/exportar os seis stems alpha8 e fazer A/B com alpha7, procurando cortes, clicks, mudança de separação ou seams nas fronteiras;
 7. somente depois desse gate decidir se vale adicionar paralelismo controlado; o alpha8 mantém Eigen single-thread deliberadamente para medir primeiro o ganho da correção estrutural;
 8. validar Home/outro app/tela bloqueada e cancelamento durante uma execução longa;
-9. em seguida executar **BS-RoFormer-SW / Alta qualidade** no Android arm64 real, resolver licença de redistribuição e avançar para Comparar/workflow completo.
+9. no próximo APK, executar a **limpeza Demucs-only** completa do Android e validar que não restou qualquer tela, texto, botão, estado, código, dependência, artefato ou gate de CI referente a Alta qualidade / BS-RoFormer / Comparar; depois seguir para o workflow completo.
 
 ## Continuidade
 
