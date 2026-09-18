@@ -4,7 +4,7 @@ Reimplementação Android nativa do Guitar Backing Wizard, tendo **GBW Linux 5.2
 
 ## Estado
 
-Versão de desenvolvimento: `6.0.0-alpha7`.
+Versão de desenvolvimento: `6.0.0-alpha8`.
 
 O Android já possui três fluxos DSP/ML centrais implementados digitalmente:
 
@@ -78,7 +78,11 @@ Stems, nesta ordem:
 5. `guitar`
 6. `piano`
 
-O pipeline mede tempo total e pico PSS observado, remove saídas parciais em erro/cancelamento e rejeita modelo de quatro fontes no JNI.
+No alpha8, o GBW entrega diretamente cada janela já preparada ao `model_inference()` do demucs.cpp, removendo a segunda camada redundante de shift/split/overlap que existia no alpha7. Buffers nativos são reutilizados, o alvo Demucs usa `-O3 -DNDEBUG`, e o paralelismo Eigen permanece desligado deliberadamente até medir o ganho estrutural no hardware real.
+
+O pipeline mede tempo total, PSS durante a inferência, mediana/máximo por chunk e estado térmico. Remove saídas parciais em erro/cancelamento, trata janelas silenciosas sem NaN e rejeita modelo de quatro fontes no JNI.
+
+Após sucesso, a tela **Separação** lista os seis stems com **Ouvir/Parar** e oferece **Exportar os 6 stems…** via SAF para uma pasta escolhida. O alpha8 também pode recuperar os stems de uma execução alpha7 existente quando instalado por cima sem limpar os dados do app.
 
 ## Alta qualidade — BS-RoFormer-SW
 
@@ -125,18 +129,27 @@ Todo commit/push dispara automaticamente **Android CI**. O workflow executa:
 5. Android Lint;
 6. `assembleDebug` com NDK/CMake;
 7. verificação das bibliotecas nativas Rubber Band, Demucs e BS-RoFormer no APK arm64;
-8. verificação das classes Java críticas do FFmpegKit/Smart Exception no DEX final;
-9. verificação do Manifest mesclado do worker `:media`/`dataSync`;
-10. SHA-256/metadata do APK e pins de DSP/ML;
-11. publicação do APK debug e relatórios como artifacts.
+8. verificação dos marcadores do runtime Demucs otimizado dentro do APK;
+9. verificação das classes Java críticas do FFmpegKit/Smart Exception no DEX final;
+10. verificação do Manifest mesclado do worker `:media`/`dataSync`;
+11. SHA-256/metadata do APK e pins de DSP/ML;
+12. publicação do APK debug e relatórios como artifacts.
+
+## Checkpoint alpha8
+
+- commit funcional: `be9b8bc765aaca5cd0f774c1e3774e16679e7da8`;
+- Android CI #79 / run `35361804071`: **SUCCESS**;
+- APK: `64,940,273` bytes;
+- SHA-256: `f47826ff94691a5192a6f491e6b9787e9611ad6a13b2c5930e39512b91431983`;
+- baseline físico alpha7: `4375 s`, `195 MiB`, seis stems estruturais, SUCCESS.
 
 ## Limite da homologação digital
 
 Ainda dependem de aparelho real:
 
-- inferência completa Demucs em música real;
-- qualidade auditiva dos seis stems e seams entre chunks;
-- RAM/PSS, tempo, thermal throttling e bateria reais;
+- desempenho e estabilidade do engine QUICK otimizado alpha8 contra o baseline alpha7;
+- qualidade auditiva A/B dos seis stems e seams entre chunks;
+- RAM/PSS amostrado, tempo, thermal throttling e bateria reais;
 - Home/outro app/tela bloqueada por períodos longos;
 - providers SAF reais;
 - percepção auditiva final do Rubber Band R3.

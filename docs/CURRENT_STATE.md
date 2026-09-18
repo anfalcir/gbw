@@ -22,7 +22,7 @@
 
 ## Android
 
-Linha atual: **6.0.0-alpha7**.
+Linha atual: **6.0.0-alpha8**.
 
 ### Domínio/UI já portados
 
@@ -58,8 +58,12 @@ Runtime Android:
 - Eigen pin: `dd8c71e62852b2fe429edb6682ac91fd1c578a26`;
 - ABI inicial: `arm64-v8a`;
 - biblioteca empacotada: `libgbw_demucs.so`;
-- JNI rejeita modelo de quatro fontes e exige tensor de seis stems;
-- identidade nativa registra runtime/modelo/sample-rate/canais/stems.
+- JNI rejeita modelo de quatro fontes e exige a janela fixa de 343.980 frames;
+- o engine QUICK alpha8 usa diretamente `demucscpp::model_inference()` sobre a janela já segmentada pelo GBW, evitando a segunda camada redundante de shift/split/overlap que existia no alpha7;
+- os buffers Demucs/STFT nativos são reutilizados durante todo o job, reduzindo alocações por trecho;
+- build Demucs em `-O3 -DNDEBUG`; paralelismo Eigen continua deliberadamente desativado nesta etapa para isolar o ganho estrutural antes de testar multithreading;
+- janelas totalmente silenciosas produzem seis saídas silenciosas válidas em vez de NaN/erro de normalização;
+- identidade nativa registra `engine=direct-segment-v1;window_frames=343980;parallel=eigen-off`.
 
 Checkpoint externo:
 
@@ -98,7 +102,7 @@ Ordem fixa dos seis stems:
 5. `guitar`
 6. `piano`
 
-A implementação mede `elapsedMillis` e pico observado de PSS durante a execução, preserva progresso persistido e remove saída parcial em falha/cancelamento.
+A implementação mede `elapsedMillis`, PSS amostrado também durante a chamada nativa, duração por chunk (mediana/máximo) e maior estado térmico observado. Preserva progresso persistido e remove saída parcial em falha/cancelamento.
 
 ### UI de Separação
 
@@ -109,6 +113,10 @@ A implementação mede `elapsedMillis` e pico observado de PSS durante a execuç
 - cancelamento pela UI/notificação;
 - **Alta qualidade / BS-RoFormer-SW** executa o pipeline real quando o PTE autoritativo está instalado;
 - o PTE pode ser importado via SAF e é revalidado por bytes + SHA-256;
+- ao concluir, a própria tela valida e lista os seis stems com **Ouvir/Parar**;
+- **Exportar os 6 stems…** usa SAF/OpenDocumentTree e copia os seis WAVs para a pasta escolhida pelo usuário, com validação de bytes e rollback dos arquivos criados se houver falha parcial;
+- `SeparationResultStore` persiste o último resultado completo com escrita atômica/lock cross-process;
+- upgrade alpha7 → alpha8 consegue recuperar os stems privados já concluídos no alpha7, desde que o app seja atualizado por cima sem desinstalar/limpar dados;
 - Comparar permanece bloqueado até o gate runtime arm64 da Alta qualidade.
 
 ## BS-RoFormer-SW — gate digital de produção
@@ -148,6 +156,9 @@ O manager implementa `.part`, Content-Length quando disponível, limite de bytes
 - homologação física do alpha6 com o mesmo M4A: a UI permaneceu viva e o job terminou de forma controlada em `demucs:audio-ffmpeg` com `NoClassDefFoundError`, antes de `demucs:model-load`;
 - inspeção do APK exato da CI #73 confirmou que `FFmpegKitConfig` referenciava `com.arthenica.smartexception.java.Exceptions`, mas essa classe não estava definida em nenhum DEX do APK;
 - alpha7 fixa explicitamente `smart-exception-java:0.2.1` + `smart-exception-common:0.2.1`, preserva a causa encadeada de erros de runtime e adiciona gate que lê as tabelas `class_defs` dos DEX do APK;
+- homologação física do alpha7 com o mesmo M4A: **SUCCESS 100%**, seis stems estruturais validados em 44,1 kHz, `4375 s` (1 h 12 min 55 s) e PSS observado de `195 MiB`; a notificação persistente/Foreground Service permaneceu ativa até o fim;
+- esse baseline físico revelou desempenho inadequado (~20× tempo real) e ausência de UX para ouvir/exportar os WAVs privados;
+- alpha8 remove a dupla segmentação no caminho QUICK, reutiliza buffers, compila o Demucs em `-O3`, instrumenta chunks/PSS/thermal e expõe preview + exportação dos stems.
 - Demucs e BS-RoFormer marcam `audio-stage`, `audio-ffmpeg` e `audio-validate` separadamente para diagnóstico físico;
 - `ForegroundService` é proprietário das tarefas pesadas;
 - Activity não é proprietária do job;
@@ -183,20 +194,29 @@ Gates atuais:
 5. Android Lint;
 6. `assembleDebug` NDK/CMake arm64;
 7. verificação de `libgbw_rubberband.so`, `libgbw_demucs.so` e `libgbw_bsroformer_spectral.so` dentro do APK;
-8. verificação de classes Java críticas do FFmpegKit no DEX final (`FFmpegKitConfig` + `smart-exception Exceptions`);
-9. verificação do Manifest mesclado: worker `:media` + `foregroundServiceType=dataSync`;
-10. metadata/SHA-256 do APK incluindo pins do runtime e modelo;
-11. upload do APK debug e relatórios.
+8. verificação do runtime Demucs otimizado dentro do APK (`engine=direct-segment-v1`, janela fixa e paralelismo Eigen off);
+9. verificação de classes Java críticas do FFmpegKit no DEX final (`FFmpegKitConfig` + `smart-exception Exceptions`);
+10. verificação do Manifest mesclado: worker `:media` + `foregroundServiceType=dataSync`;
+11. metadata/SHA-256 do APK incluindo pins do runtime e modelo;
+12. upload do APK debug e relatórios.
 
 Checkpoint Android atual para homologação física:
 
-- versão: `6.0.0-alpha7`;
-- commit funcional: `382b0553ae99866430b226a291869181044c935c`;
-- Android CI run `#75` / run ID `35348230980`: **SUCCESS**;
-- APK: `65,022,189` bytes;
-- SHA-256: `18d105a08d54e936cacf4f75467666705aa61854c7d407c08449f040d4d4a884`;
+- versão: `6.0.0-alpha8`;
+- commit funcional: `be9b8bc765aaca5cd0f774c1e3774e16679e7da8`;
+- Android CI run `#79` / run ID `35361804071`: **SUCCESS**;
+- APK: `64,940,273` bytes;
+- SHA-256: `f47826ff94691a5192a6f491e6b9787e9611ad6a13b2c5930e39512b91431983`;
+- Unit Tests / Lint / assembleDebug: **PASS**;
+- gate de runtime Demucs otimizado: **PASS**;
 - gate de runtime FFmpegKit/Smart Exception: **PASS**;
-- gate do Manifest mesclado do worker: **PASS**.
+- gate do Manifest mesclado do worker: **PASS**;
+- auditoria do diff alpha7 → alpha8: nenhuma alteração em `linux/`.
+
+Baseline físico anterior para comparação:
+
+- alpha7: `4375 s`, `195 MiB`, seis stems estruturais, SUCCESS;
+- usar esse resultado para A/B de desempenho e qualidade com o alpha8.
 
 ## Licenças / distribuição
 
@@ -211,9 +231,9 @@ Detalhes: `android/app/src/main/cpp/THIRD_PARTY.md`.
 
 A implementação digital não equivale a homologação física completa. Permanecem para dispositivo Android arm64 real/percepção humana:
 
-- inferência Demucs completa no aparelho alvo com música real;
-- avaliação auditiva dos seis stems e continuidade nas fronteiras de chunks;
-- RAM/PSS real, thermal throttling, tempo, bateria e estabilidade prolongada;
+- execução física do **engine QUICK otimizado alpha8** com a mesma música real e comparação contra o baseline alpha7 de 4375 s / 195 MiB;
+- avaliação auditiva A/B dos seis stems, especialmente continuidade nas fronteiras de core de 5,5 s e qualquer alteração causada pela remoção do shift/split interno redundante;
+- PSS amostrado, thermal throttling, tempo, bateria e estabilidade prolongada do alpha8;
 - execução com Home/outro app/tela bloqueada;
 - providers SAF reais em cancelamento/falha;
 - execução JNI/R3 e percepção auditiva final do Pitch de Arquivo.
@@ -230,15 +250,15 @@ Também permanecem como gates de desenvolvimento:
 
 ## Próximo gate
 
-1. executar a Separação Rápida no alpha7 com o mesmo M4A e confirmar que o antigo `NoClassDefFoundError` não reaparece;
-2. confirmar avanço por `demucs:audio-stage` → `demucs:audio-ffmpeg` → `demucs:audio-validate` → `demucs:model-load` e, se possível, até a primeira `demucs:infer:X/Y`;
-3. se houver nova falha, registrar a fase e a mensagem completas exibidas; o alpha7 agora preserva o tipo/mensagem da causa encadeada;
-4. validar Home/outro app/tela bloqueada com o serviço ativo;
-5. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
-6. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;
-7. resolver a licença de redistribuição do checkpoint/PTE antes de habilitar URL pública;
-8. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
-9. depois seguir Fonte/download e o workflow completo.
+1. instalar o alpha8 **por cima do alpha7**, sem desinstalar nem limpar dados;
+2. abrir **2. Separação** e confirmar que o resultado alpha7 já existente é recuperado como **Stems disponíveis**;
+3. usar **Ouvir** nos seis stems e **Exportar os 6 stems…** para uma pasta SAF; validar musicalmente os arquivos alpha7 antes de qualquer recomputação;
+4. executar novamente o mesmo M4A no alpha8 e registrar tempo total, PSS, mediana/máximo por chunk e maior status térmico;
+5. comparar o tempo com o baseline alpha7 de **4375 s** e confirmar que o contador continua avançando sem regressão de background;
+6. ouvir/exportar os seis stems alpha8 e fazer A/B com alpha7, procurando cortes, clicks, mudança de separação ou seams nas fronteiras;
+7. somente depois desse gate decidir se vale adicionar paralelismo controlado; o alpha8 mantém Eigen single-thread deliberadamente para medir primeiro o ganho da correção estrutural;
+8. validar Home/outro app/tela bloqueada e cancelamento durante uma execução longa;
+9. em seguida executar **BS-RoFormer-SW / Alta qualidade** no Android arm64 real, resolver licença de redistribuição e avançar para Comparar/workflow completo.
 
 ## Continuidade
 
