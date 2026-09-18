@@ -52,7 +52,7 @@ struct GbwDemucsContext {
 };
 
 bool supportedBlasThreads(int threads) {
-    return threads == 1 || threads == 2 || threads == 4;
+    return threads == 1 || threads == 2;
 }
 
 GbwDemucsContext *contextFromHandle(jlong handle) {
@@ -108,7 +108,7 @@ Java_com_gbw_android_separation_DemucsNative_nativeConfigureBlasThreads(
     JNIEnv *env, jobject, jint threads) {
     try {
         if (!supportedBlasThreads(threads)) {
-            throw std::invalid_argument("Demucs BLAS threads must be 1, 2, or 4");
+            throw std::invalid_argument("Demucs BLAS threads must be 1 or 2");
         }
         openblas_set_num_threads(threads);
         const int actual = openblas_get_num_threads();
