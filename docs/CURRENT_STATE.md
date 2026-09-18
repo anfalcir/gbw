@@ -105,7 +105,29 @@ A implementação mede `elapsedMillis` e pico observado de PSS durante a execuç
 - primeiro uso informa que o modelo externo será baixado/verificado;
 - progresso e estado vêm do mesmo Foreground Service dos jobs longos;
 - cancelamento pela UI/notificação;
-- Alta qualidade / BS-RoFormer-SW e Comparar permanecem visíveis, mas não executam silenciosamente um fallback enquanto o próximo motor não estiver implementado.
+- **Alta qualidade / BS-RoFormer-SW** executa o pipeline real quando o PTE autoritativo está instalado;
+- o PTE pode ser importado via SAF e é revalidado por bytes + SHA-256;
+- Comparar permanece bloqueado até o gate runtime arm64 da Alta qualidade.
+
+## BS-RoFormer-SW — gate digital de produção
+
+O workflow **BS-RoFormer Production PTE #3** (run `35289168951`) terminou **SUCCESS** e fixou o artifact autoritativo:
+
+- arquivo: `GBW-BS-RoFormer-SW-executorch-1.3.1-T1151.pte`;
+- bytes: `700,284,960`;
+- SHA-256: `8c3cc68404b7fadb2a41ec332b0493290d956f9490dc5c21c5120ee596807182`;
+- backend: XNNPACK;
+- ExecuTorch: `1.3.1`;
+- torch de export: `2.12.1+cpu`;
+- input: `[1,2,1025,1151,2]`;
+- output: `[1,6,2050,1151,2]`;
+- parâmetros: `174,656,564`.
+
+Pipeline Android: SAF → float32 stereo 44,1 kHz → PTE privado validado → ExecuTorch mmap → reflect/chunking 588800 → PFFFT STFT → XNNPACK masks → PFFFT ISTFT → overlap-add streaming → 6 WAVs float32 stereo.
+
+O manager implementa `.part`, Content-Length quando disponível, limite de bytes, cancelamento cooperativo, fsync, SHA-256, promoção atômica e cleanup. O PTE permanece fora do APK.
+
+**Licença:** o código `bs-roformer-infer` é MIT, mas o model card atual dos pesos usados declara a licença do checkpoint como desconhecida. Por isso a URL pública automática do PTE fica deliberadamente vazia e o projeto não republica o PTE derivado como Release enquanto direitos de redistribuição não forem estabelecidos. Para desenvolvimento/homologação, o artifact exato da CI pode ser importado via SAF.
 
 ## Background/lifecycle
 
@@ -175,7 +197,8 @@ A implementação digital não equivale a homologação física completa. Perman
 
 Também permanecem como gates de desenvolvimento:
 
-- **BS-RoFormer-SW real no Android**;
+- execução física arm64 do BS-RoFormer-SW, incluindo mmap/XNNPACK, PSS, tempo e thermal;
+- resolução da licença/redistribuição dos pesos/PTE antes de hosting público;
 - modo Comparar executando os dois motores;
 - workflow completo Fonte → Separação → Afinação → Exportação;
 - shared gain/exportação final;
@@ -184,10 +207,11 @@ Também permanecem como gates de desenvolvimento:
 
 ## Próximo gate
 
-1. integrar e provar **BS-RoFormer-SW / Alta qualidade** no Android, mantendo modelos grandes fora do APK;
-2. definir runtime, pesos/version/hash/licença, RAM, segmentação e cancelamento;
-3. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
-4. depois seguir Fonte/download e o workflow completo, sem regredir Pitch de Arquivo nem Demucs.
+1. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
+2. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;
+3. resolver a licença de redistribuição do checkpoint/PTE antes de habilitar URL pública;
+4. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
+5. depois seguir Fonte/download e o workflow completo.
 
 ## Continuidade
 

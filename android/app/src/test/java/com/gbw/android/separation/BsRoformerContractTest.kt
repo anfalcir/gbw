@@ -3,6 +3,7 @@ package com.gbw.android.separation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BsRoformerContractTest {
@@ -12,6 +13,16 @@ class BsRoformerContractTest {
         assertEquals(699_412_152L, BsRoformerContract.SOURCE_CHECKPOINT_BYTES)
         assertEquals(686L, BsRoformerContract.PACKAGED_CONFIG_BYTES)
         assertEquals("1.3.1", BsRoformerContract.EXECUTORCH_VERSION)
+        assertEquals("2.12.1+cpu", BsRoformerContract.TORCH_EXPORT_VERSION)
+        assertEquals("XNNPACK", BsRoformerContract.PTE_BACKEND)
+        assertEquals(700_284_960L, BsRoformerContract.PTE_BYTES)
+        assertEquals(
+            "8c3cc68404b7fadb2a41ec332b0493290d956f9490dc5c21c5120ee596807182",
+            BsRoformerContract.PTE_SHA256,
+        )
+        assertEquals(35_289_168_951L, BsRoformerContract.PTE_WORKFLOW_RUN_ID)
+        assertEquals(10_526_051_716L, BsRoformerContract.PTE_ARTIFACT_ID)
+        assertNull(BsRoformerContract.productionPte.downloadUrl)
         assertEquals(44_100, BsRoformerContract.SAMPLE_RATE)
         assertEquals(2, BsRoformerContract.CHANNELS)
         assertEquals(

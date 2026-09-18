@@ -104,6 +104,21 @@ android/tools/BsRoformerSpectralHostSmoke.cpp, whose committed reference bins
 were generated from the exact torch.stft/torch.istft semantics used by the
 BS-RoFormer 0.1.5 source. CI requires this host golden before assembling the APK.
 
+## BS-RoFormer-SW source/checkpoint and production PTE
+
+- `bs-roformer-infer 0.1.5` source: `244cddd4f7611956eb1cc4958e82b65b4891c019` (MIT code)
+- model revision: `a443a2985534b3bc815ef54a5d446c6a0390f974`
+- checkpoint: 699,412,152 bytes; SHA-256 `24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e`
+- packaged config SHA-256: `52df622c95ff3c1f4e1389f476ed737581a2c2dc12324d52c9763be9ccd2be2b`
+- production PTE: `GBW-BS-RoFormer-SW-executorch-1.3.1-T1151.pte`
+- PTE: 700,284,960 bytes; SHA-256 `8c3cc68404b7fadb2a41ec332b0493290d956f9490dc5c21c5120ee596807182`
+- export: torch `2.12.1+cpu`, ExecuTorch `1.3.1`, XNNPACK
+- provenance: BS-RoFormer Production PTE #3 / run `35289168951`
+
+### Weight/PTE redistribution gate
+
+The inference code licence does not establish the trained checkpoint licence. The current checkpoint host declares the model licence as **unknown**. GBW therefore does not publish/rehost the checkpoint or derived PTE as a public Release asset until redistribution rights are established. The Android public PTE URL is intentionally unset; development/homologation imports the exact CI-produced PTE through SAF and validates exact bytes + SHA-256.
+
 ## Reproducibility
 
 `CMakeLists.txt` fetches exact runtime source commits. `android/scripts/validate_demucs_model.sh` fixes the external checkpoint revision, byte size, SHA-256, six-source magic and representative tensor names. Any future runtime/model upgrade must deliberately change the relevant pins, pass Android CI, update this file and update current-state/parity documentation.

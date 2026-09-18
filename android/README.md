@@ -6,12 +6,13 @@ Reimplementação Android nativa do Guitar Backing Wizard, tendo **GBW Linux 5.2
 
 Versão de desenvolvimento: `6.0.0-alpha1`.
 
-O Android já possui dois fluxos DSP/ML centrais implementados digitalmente:
+O Android já possui três fluxos DSP/ML centrais implementados digitalmente:
 
 - **Pitch de Arquivo** com Rubber Band R3 via NDK/JNI;
-- **Separação Rápida** com Demucs `htdemucs_6s` via C++17/NDK/JNI.
+- **Separação Rápida** com Demucs `htdemucs_6s` via C++17/NDK/JNI;
+- **Alta qualidade** com BS-RoFormer-SW + PFFFT + ExecuTorch/XNNPACK.
 
-A linha continua alpha porque faltam BS-RoFormer-SW, workflow completo, projetos/backup e homologação física final em hardware Android arm64.
+A linha continua alpha porque a Alta qualidade ainda precisa do gate runtime arm64 físico, além do workflow completo, projetos/backup e homologação final.
 
 ## Stack fixada
 
@@ -78,9 +79,20 @@ Stems, nesta ordem:
 
 O pipeline mede tempo total e pico PSS observado, remove saídas parciais em erro/cancelamento e rejeita modelo de quatro fontes no JNI.
 
-## Alta qualidade
+## Alta qualidade — BS-RoFormer-SW
 
-**BS-RoFormer-SW** continua sendo o motor planejado para Alta qualidade e é o próximo gate principal. A UI não substitui silenciosamente essa opção por Demucs enquanto o motor não estiver implementado.
+O core exato está exportado e o pipeline Android está conectado:
+
+- PTE: `GBW-BS-RoFormer-SW-executorch-1.3.1-T1151.pte`;
+- tamanho: `700,284,960` bytes;
+- SHA-256: `8c3cc68404b7fadb2a41ec332b0493290d956f9490dc5c21c5120ee596807182`;
+- ExecuTorch `1.3.1`, XNNPACK, torch export `2.12.1+cpu`;
+- PFFFT @ `e1dbebc9fbf74247d12f094accbbc470aaee8715`;
+- input `[1,2,1025,1151,2]`, masks `[1,6,2050,1151,2]`;
+- STFT/ISTFT nativos, mmap, buffers diretos e overlap-add streaming;
+- seis WAVs float32 estéreo validados estruturalmente.
+
+O PTE fica fora do APK. Como a licença dos pesos upstream está declarada como desconhecida, o build não o republica nem ativa download público automático. Para desenvolvimento/homologação, a UI importa o PTE exato produzido pela CI e valida bytes/SHA-256 antes de usar.
 
 ## Validações sem aparelho
 

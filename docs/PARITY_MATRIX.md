@@ -35,8 +35,11 @@
 | Demucs modelo fora do app | ambiente desktop | fora do APK, cache privado verificado | ✅ implementação |
 | Demucs cancelamento | sim | coroutine + native + cleanup | ✅ implementação; 🟡 aparelho |
 | Métricas Demucs | ambiente desktop | elapsed + pico PSS observado | ✅ instrumentado; 🟡 benchmark real |
-| BS-RoFormer | Alta qualidade | Alta qualidade | ⏳ próximo gate |
-| Comparar motores | ambos | Demucs + BS-RoFormer | ⏳ após BS-RoFormer |
+| BS-RoFormer core | Alta qualidade | ExecuTorch 1.3.1/XNNPACK + PFFFT | ✅ export/PTE/DSP/pipeline; 🟡 arm64 físico |
+| BS-RoFormer PTE | ambiente desktop | 700.284.960 bytes + SHA-256 fixo, fora do APK | ✅ artifact CI/import manager; ⚠️ hosting público bloqueado por licença |
+| BS-RoFormer chunking | overlap upstream | 588.800 / step 294.400 / fade 58.880 | ✅ unitário/golden; 🟡 seams reais |
+| BS-RoFormer outputs | 6 stems | bass/drums/other/vocals/guitar/piano | ✅ contrato/streaming; 🟡 áudio real |
+| Comparar motores | ambos | Demucs + BS-RoFormer | ⏳ após gate arm64 BS-RoFormer |
 | Shared gain backing/guitar | sim | mesma regra | ⏳ workflow/exportação |
 | Backup de projeto | sim | interoperável | ⏳ M3/M8 |
 | Projetos | manifest JSON | schema versionado | ⏳ M3 |

@@ -26,6 +26,29 @@ internal object BsRoformerContract {
         "52df622c95ff3c1f4e1389f476ed737581a2c2dc12324d52c9763be9ccd2be2b"
 
     const val EXECUTORCH_VERSION = "1.3.1"
+    const val TORCH_EXPORT_VERSION = "2.12.1+cpu"
+    const val PTE_BACKEND = "XNNPACK"
+    const val PTE_FILE_NAME = "GBW-BS-RoFormer-SW-executorch-1.3.1-T1151.pte"
+    const val PTE_BYTES = 700_284_960L
+    const val PTE_SHA256 =
+        "8c3cc68404b7fadb2a41ec332b0493290d956f9490dc5c21c5120ee596807182"
+    const val PTE_WORKFLOW_RUN_ID = 35_289_168_951L
+    const val PTE_WORKFLOW_RUN_NUMBER = 3
+    const val PTE_ARTIFACT_ID = 10_526_051_716L
+    const val PTE_ARTIFACT_BUNDLE = "GBW-BS-RoFormer-SW-production-3"
+
+    // Weight redistribution is not cleared yet. Keep this empty until the
+    // checkpoint/PTE licence gate is resolved.
+    const val PTE_PUBLIC_DOWNLOAD_URL = ""
+
+    val productionPte = BsRoformerModelSpec(
+        id = "bs-roformer-sw-executorch-t1151",
+        fileName = PTE_FILE_NAME,
+        expectedBytes = PTE_BYTES,
+        sha256 = PTE_SHA256,
+        downloadUrl = PTE_PUBLIC_DOWNLOAD_URL.takeIf { it.isNotBlank() },
+    )
+
     const val PFFFT_COMMIT = "e1dbebc9fbf74247d12f094accbbc470aaee8715"
 
     const val SAMPLE_RATE = 44_100
@@ -68,5 +91,8 @@ internal object BsRoformerContract {
         check(PRODUCTION_STFT_TIME_FRAMES == 1_151)
         check(stemNames.size == STEM_COUNT)
         check(stemNames.distinct().size == STEM_COUNT)
+        check(PTE_BYTES > SOURCE_CHECKPOINT_BYTES)
+        check(PTE_SHA256.matches(Regex("[0-9a-f]{64}")))
+        check(productionPte.downloadUrl == null)
     }
 }

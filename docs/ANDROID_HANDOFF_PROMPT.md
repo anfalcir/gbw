@@ -172,26 +172,29 @@ Ainda NÃO chame isso de homologação física. Exigem aparelho real:
 - providers SAF reais.
 
 ==================================================
-6. PRÓXIMO GATE PRINCIPAL — BS-ROFORMER-SW
+6. ESTADO ATUAL — BS-ROFORMER-SW / ALTA QUALIDADE
 ==================================================
 
-Agora o foco principal é **Alta qualidade / BS-RoFormer-SW**.
+O core exato já passou export/lowering para ExecuTorch/XNNPACK.
 
-Objetivos obrigatórios:
+- source `bs-roformer-infer 0.1.5` @ `244cddd4f7611956eb1cc4958e82b65b4891c019`;
+- model revision `a443a2985534b3bc815ef54a5d446c6a0390f974`;
+- checkpoint SHA-256 `24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e`;
+- config SHA-256 `52df622c95ff3c1f4e1389f476ed737581a2c2dc12324d52c9763be9ccd2be2b`;
+- PTE `GBW-BS-RoFormer-SW-executorch-1.3.1-T1151.pte`;
+- bytes `700,284,960`;
+- SHA-256 `8c3cc68404b7fadb2a41ec332b0493290d956f9490dc5c21c5120ee596807182`;
+- torch export `2.12.1+cpu`, ExecuTorch `1.3.1`, XNNPACK;
+- input `[1,2,1025,1151,2]`, output `[1,6,2050,1151,2]`;
+- Production PTE #3 / run `35289168951`: SUCCESS.
 
-1. identificar e provar runtime Android arm64 real;
-2. fixar origem dos pesos, revisão/version, tamanho, SHA-256 e licença;
-3. manter pesos grandes fora do APK;
-4. implementar download/cache/validação atômica equivalente ao Demucs;
-5. provar shapes, sample rate, canais e ordem/semântica dos outputs;
-6. implementar segmentação/overlap com RAM móvel limitada;
-7. implementar cancelamento e cleanup;
-8. instrumentar tempo e PSS/RAM programaticamente;
-9. adicionar gates CI objetivos para runtime/modelo;
-10. integrar a opção **Alta qualidade** na UI sem fallback silencioso;
-11. somente depois implementar **Comparar as duas**, reaproveitando preparação/I/O quando seguro.
+Android implementa: SAF → float32 stereo 44.1 kHz → PTE privado validado → mmap → reflect/chunk → PFFFT STFT → XNNPACK masks → PFFFT ISTFT → overlap-add streaming → 6 stems.
 
-Não reduza silenciosamente o modelo ou troque por outro motor apenas para facilitar Android. Qualquer conversão de formato/runtime precisa de cadeia reproduzível e teste de correlação/paridade.
+Alta qualidade usa Foreground Service, progresso persistido, PSS/tempo, cleanup e cancelamento cooperativo entre forwards.
+
+LICENÇA: a licença dos pesos/checkpoint permanece declarada como desconhecida. Não publique/rehoste o PTE como Release público enquanto isso não for resolvido. O build de desenvolvimento importa via SAF o artifact exato da CI e valida bytes/SHA.
+
+Próximo gate: confirmar CI verde; importar o PTE em Android arm64 real; medir mmap/XNNPACK, PSS/RAM, tempo, thermal, bateria e estabilidade; avaliar stems/seams e lifecycle; resolver licença/hosting; então implementar Comparar.
 
 ==================================================
 7. DEPOIS DO BS-ROFORMER
