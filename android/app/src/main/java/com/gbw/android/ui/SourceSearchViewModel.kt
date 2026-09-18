@@ -37,12 +37,12 @@ internal class SourceSearchViewModel(
     var message by mutableStateOf<String?>(null)
         private set
 
-    fun setArtist(value: String) {
+    fun updateArtist(value: String) {
         artist = value
         savedStateHandle[KEY_ARTIST] = value
     }
 
-    fun setSong(value: String) {
+    fun updateSong(value: String) {
         song = value
         savedStateHandle[KEY_SONG] = value
     }
@@ -52,12 +52,12 @@ internal class SourceSearchViewModel(
         savedStateHandle[KEY_DEPTH] = depth.name
     }
 
-    fun setManualUrl(value: String) {
+    fun updateManualUrl(value: String) {
         manualUrl = value
         savedStateHandle[KEY_MANUAL_URL] = value
     }
 
-    fun setMessage(value: String?) {
+    fun updateMessage(value: String?) {
         message = value
     }
 

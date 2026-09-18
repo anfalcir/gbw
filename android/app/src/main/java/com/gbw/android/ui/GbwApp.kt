@@ -315,7 +315,7 @@ private fun SourceScreen(
 
                 OutlinedTextField(
                     value = searchState.artist,
-                    onValueChange = searchState::setArtist,
+                    onValueChange = searchState::updateArtist,
                     label = { Text("Artista") },
                     placeholder = { Text("Ex.: Wolves At The Gate") },
                     enabled = !searchState.searching,
@@ -324,7 +324,7 @@ private fun SourceScreen(
                 )
                 OutlinedTextField(
                     value = searchState.song,
-                    onValueChange = searchState::setSong,
+                    onValueChange = searchState::updateSong,
                     label = { Text("Música") },
                     placeholder = { Text("Ex.: Enemy") },
                     enabled = !searchState.searching,
@@ -347,7 +347,7 @@ private fun SourceScreen(
                     onClick = {
                         val song = searchState.song.trim()
                         if (song.isBlank()) {
-                            searchState.setMessage("Informe o nome da música.")
+                            searchState.updateMessage("Informe o nome da música.")
                         } else {
                             searchState.beginSearch()
                             val request = SourceSearchRequest(
@@ -391,7 +391,7 @@ private fun SourceScreen(
                                     Intent(Intent.ACTION_VIEW, Uri.parse(candidate.url)),
                                 )
                             }.onFailure { error ->
-                                searchState.setMessage(
+                                searchState.updateMessage(
                                     "Não foi possível abrir a fonte: " +
                                         (error.message ?: "nenhum aplicativo compatível."),
                                 )
@@ -434,7 +434,7 @@ private fun SourceScreen(
                                             Intent(Intent.ACTION_VIEW, Uri.parse(link.url)),
                                         )
                                     }.onFailure { error ->
-                                        searchState.setMessage(
+                                        searchState.updateMessage(
                                             "Não foi possível abrir ${link.label}: " +
                                                 (error.message ?: "nenhum aplicativo compatível."),
                                         )
@@ -451,7 +451,7 @@ private fun SourceScreen(
                 Text("URL manual", fontWeight = FontWeight.SemiBold)
                 OutlinedTextField(
                     value = searchState.manualUrl,
-                    onValueChange = searchState::setManualUrl,
+                    onValueChange = searchState::updateManualUrl,
                     label = { Text("Link da fonte") },
                     placeholder = { Text("https://…") },
                     singleLine = true,
@@ -466,12 +466,12 @@ private fun SourceScreen(
                     onClick = {
                         val uri = manualUri
                         if (uri == null) {
-                            searchState.setMessage("Informe uma URL válida iniciando com http:// ou https://.")
+                            searchState.updateMessage("Informe uma URL válida iniciando com http:// ou https://.")
                         } else {
                             runCatching {
                                 context.startActivity(Intent(Intent.ACTION_VIEW, uri))
                             }.onFailure { error ->
-                                searchState.setMessage(
+                                searchState.updateMessage(
                                     "Não foi possível abrir a URL: " +
                                         (error.message ?: "nenhum aplicativo compatível."),
                                 )

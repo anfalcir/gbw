@@ -17,10 +17,10 @@ class SourceSearchViewModelTest {
     fun `query fields survive recreation through SavedStateHandle`() {
         val handle = SavedStateHandle()
         val first = SourceSearchViewModel(handle)
-        first.setArtist("Wolves At The Gate")
-        first.setSong("Enemy")
+        first.updateArtist("Wolves At The Gate")
+        first.updateSong("Enemy")
         first.setDepth(SourceSearchDepth.MAXIMUM)
-        first.setManualUrl("https://example.test/source")
+        first.updateManualUrl("https://example.test/source")
 
         val recreated = SourceSearchViewModel(handle)
         assertEquals("Wolves At The Gate", recreated.artist)
