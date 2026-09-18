@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -69,6 +70,9 @@ import com.gbw.android.domain.AudioKind
 import com.gbw.android.domain.FilePitchRules
 import com.gbw.android.domain.OutputFormat
 import com.gbw.android.domain.QualityStatus
+import com.gbw.android.domain.RankedSourceCandidate
+import com.gbw.android.domain.SourceSearchDepth
+import com.gbw.android.domain.SourceSearchRequest
 import com.gbw.android.domain.Tunings
 import com.gbw.android.separation.DemucsRuntimeMonitor
 import com.gbw.android.separation.DemucsThreadPolicy
@@ -77,6 +81,7 @@ import com.gbw.android.separation.SeparationResultStore
 import com.gbw.android.separation.SeparationStemExporter
 import com.gbw.android.separation.StemPreviewPlayer
 import com.gbw.android.separation.ValidatedSeparationResult
+import com.gbw.android.source.SourceSearchCoordinator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -226,6 +231,14 @@ private fun SourceScreen(
     var inspection by remember { mutableStateOf<AudioInspection?>(null) }
     var inspectionError by remember { mutableStateOf<String?>(null) }
     var inspecting by remember { mutableStateOf(false) }
+    val onlineScope = rememberCoroutineScope()
+    val onlineCoordinator = remember { SourceSearchCoordinator() }
+    var onlineArtist by rememberSaveable { mutableStateOf("") }
+    var onlineSong by rememberSaveable { mutableStateOf("") }
+    var onlineDepth by rememberSaveable { mutableStateOf(SourceSearchDepth.ROBUST.name) }
+    var onlineSearching by remember { mutableStateOf(false) }
+    var onlineResults by remember { mutableStateOf<List<RankedSourceCandidate>>(emptyList()) }
+    var onlineMessage by remember { mutableStateOf<String?>(null) }
     val selectedDisplayName = remember(selectedUriText) {
         selectedUriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
     }
@@ -290,13 +303,130 @@ private fun SourceScreen(
         }
 
         OutlinedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Fonte online", fontWeight = FontWeight.SemiBold)
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Pesquisa e download serão conectados em um bloco próprio; o arquivo local já permite validar o fluxo Android sem depender dessa etapa.",
+                    "Pesquisa online de fontes",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "O GBW pesquisa e ranqueia resultados usando o mesmo contrato de identidade do Linux 5.23. " +
+                        "Nesta etapa, a descoberta online não baixa nem extrai mídia automaticamente.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                OutlinedTextField(
+                    value = onlineArtist,
+                    onValueChange = { onlineArtist = it },
+                    label = { Text("Artista") },
+                    placeholder = { Text("Ex.: Wolves At The Gate") },
+                    enabled = !onlineSearching,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = onlineSong,
+                    onValueChange = { onlineSong = it },
+                    label = { Text("Música") },
+                    placeholder = { Text("Ex.: Enemy") },
+                    enabled = !onlineSearching,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                SimpleDropdown(
+                    label = "Profundidade",
+                    selected = if (onlineDepth == SourceSearchDepth.MAXIMUM.name) "Máxima" else "Robusta",
+                    values = listOf("Robusta", "Máxima"),
+                    onSelect = {
+                        onlineDepth = if (it == "Máxima") {
+                            SourceSearchDepth.MAXIMUM.name
+                        } else {
+                            SourceSearchDepth.ROBUST.name
+                        }
+                    },
+                )
+
+                Button(
+                    onClick = {
+                        val song = onlineSong.trim()
+                        if (song.isBlank()) {
+                            onlineMessage = "Informe o nome da música."
+                        } else {
+                            onlineSearching = true
+                            onlineResults = emptyList()
+                            onlineMessage = "Pesquisando fontes…"
+                            val request = SourceSearchRequest(
+                                artist = onlineArtist.trim(),
+                                song = song,
+                                depth = SourceSearchDepth.valueOf(onlineDepth),
+                            )
+                            onlineScope.launch {
+                                try {
+                                    val result = onlineCoordinator.search(request)
+                                    onlineResults = result.candidates
+                                    onlineMessage = when {
+                                        result.candidates.isEmpty() && result.warnings.isNotEmpty() ->
+                                            "Nenhuma fonte encontrada. " + result.warnings.joinToString(" ")
+                                        result.candidates.isEmpty() ->
+                                            "Nenhum candidato confiável encontrado."
+                                        result.warnings.isNotEmpty() ->
+                                            "${result.candidates.size} resultado(s). " + result.warnings.joinToString(" ")
+                                        else ->
+                                            "${result.candidates.size} resultado(s) encontrado(s)."
+                                    }
+                                } catch (error: Exception) {
+                                    onlineMessage = error.message ?: "Falha na pesquisa online."
+                                } finally {
+                                    onlineSearching = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = !onlineSearching,
+                ) {
+                    Text(if (onlineSearching) "Pesquisando…" else "Encontrar fontes")
+                }
+
+                onlineMessage?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (onlineResults.isEmpty() && !onlineSearching) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
+                }
+
+                onlineResults.forEachIndexed { index, candidate ->
+                    OnlineSourceCandidateCard(
+                        candidate = candidate,
+                        recommended = index == 0 && !candidate.previewOnly,
+                        onOpen = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(candidate.url)),
+                                )
+                            }.onFailure { error ->
+                                onlineMessage =
+                                    "Não foi possível abrir a fonte: " +
+                                        (error.message ?: "nenhum aplicativo compatível.")
+                            }
+                        },
+                    )
+                }
+
+                if (onlineResults.isNotEmpty()) {
+                    Text(
+                        "Abra a fonte no serviço correspondente. Quando tiver o arquivo de áudio de forma permitida pelo serviço, " +
+                            "use “Selecionar áudio…” acima para incorporá-lo ao fluxo do GBW.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
@@ -305,6 +435,63 @@ private fun SourceScreen(
             enabled = selectedUriText.isNotBlank() && !inspecting,
         ) {
             Text("Continuar para Separação")
+        }
+    }
+}
+
+@Composable
+private fun OnlineSourceCandidateCard(
+    candidate: RankedSourceCandidate,
+    recommended: Boolean,
+    onOpen: () -> Unit,
+) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            if (recommended) {
+                Text(
+                    "Recomendado",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text(candidate.title, fontWeight = FontWeight.SemiBold)
+            Text(
+                candidate.provider.publicLabel +
+                    (candidate.uploader.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                buildString {
+                    append(candidate.quality)
+                    if (candidate.durationSeconds > 0) {
+                        append(" • ")
+                        append(com.gbw.android.domain.SourceSearchRules.durationLabel(candidate.durationSeconds))
+                    }
+                    append(" • score ")
+                    append(candidate.score)
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                candidate.reason,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (candidate.previewOnly) {
+                Text(
+                    "Trecho curto: não recomendado como fonte.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            OutlinedButton(onClick = onOpen) {
+                Text("Abrir fonte")
+            }
         }
     }
 }

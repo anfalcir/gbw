@@ -245,7 +245,7 @@ object SourceSearchRules {
             previewOnly = draft.previewOnly,
             durationWarning = durationWarning,
             official = official,
-            score = score.coerceIn(0, 100),
+            score = (if (draft.previewOnly) min(score, 5) else score).coerceIn(0, 100),
             reason = reasons.joinToString(", ").ifBlank { "melhor resultado encontrado" },
         )
     }
