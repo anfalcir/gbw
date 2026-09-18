@@ -73,4 +73,4 @@ Homologação física final e release.
 
 ## Gate atual
 
-Instalar `6.0.0-alpha9.2-4t` sobre alpha9.1 e repetir a mesma música. Comparar tempo, PSS, mediana, máximo, térmico e áudio. Manter 4 threads apenas se superar o baseline sem regressões relevantes.
+Instalar `6.0.0-alpha9.2-4t` sobre alpha9.1 e repetir a mesma música. Avaliar lado a lado tempo, PSS, mediana, máximo, térmico e áudio. Manter 4 threads apenas se superar o baseline sem regressões relevantes.
