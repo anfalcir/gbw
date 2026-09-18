@@ -4,7 +4,16 @@ Reimplementação Android nativa do Guitar Backing Wizard, tendo **GBW Linux 5.2
 
 ## Estado
 
-Versão de desenvolvimento: `6.0.0-alpha8`.
+Checkpoint atual:
+- versão: `6.0.0-alpha9.1` / versionCode `10`;
+- commit: `5d889e3ec1e8f1ffc3221dc24556ed0adac6d38d`;
+- Android CI #83 / run `35373520877`: **SUCCESS**;
+- APK SHA-256: `eb8109b4252f1321ed961860ecd6754f59f6641cd2879ab7f2b07f8e64d2ba6b`;
+- certificado de homologação SHA-256: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`.
+
+**Migração de assinatura:** alpha8 e o primeiro alpha9 usavam chaves debug efêmeras de runners distintos. É necessária uma única desinstalação para migrar para alpha9.1. Depois disso, os APKs de homologação passam a ser atualizáveis por cima com o certificado estável. Veja `../docs/ANDROID_HOMOLOGATION_SIGNING.md`.
+
+Versão de desenvolvimento: `6.0.0-alpha9.1`.
 
 O produto Android foi consolidado para dois fluxos DSP centrais:
 

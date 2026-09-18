@@ -1,5 +1,19 @@
 # GBW — Estado Atual
 
+> ## Checkpoint mais recente — assinatura estável de homologação
+>
+> A partir de **6.0.0-alpha9.1 / versionCode 10**, os APKs de homologação usam um certificado estável próprio.
+> O alpha8 e o primeiro alpha9 foram assinados por debug keys efêmeras diferentes e **não podem atualizar um ao outro**.
+> É necessária uma única desinstalação para entrar na nova cadeia de homologação; depois disso, APKs futuros com o mesmo certificado poderão atualizar normalmente por cima.
+>
+> - commit: `5d889e3ec1e8f1ffc3221dc24556ed0adac6d38d`
+> - Android CI: **#83 / run 35373520877 — SUCCESS**
+> - APK: `55.470.133` bytes
+> - APK SHA-256: `eb8109b4252f1321ed961860ecd6754f59f6641cd2879ab7f2b07f8e64d2ba6b`
+> - certificado SHA-256: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
+> - perfil: homologação/debug somente; **não usar em produção**
+> - detalhes: `docs/ANDROID_HOMOLOGATION_SIGNING.md`
+
 **Data:** 2026-09-18  
 **Repositório:** `anfalcir/gbw`  
 **Branch consolidada:** `main`  
