@@ -14,7 +14,9 @@ object AudioInspectionDispatcher {
         return if (ext == "wav") {
             withContext(Dispatchers.IO) { WavInspector.inspect(context, uri) }
         } else {
-            FfmpegAudioInspector.inspect(context, uri)
+            withContext(Dispatchers.IO) {
+                PlatformAudioInspector.inspect(context, uri, name)
+            }
         }
     }
 

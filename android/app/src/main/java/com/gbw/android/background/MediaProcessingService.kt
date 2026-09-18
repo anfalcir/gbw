@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.gbw.android.MainActivity
@@ -77,9 +78,8 @@ class MediaProcessingService : Service() {
     }
 
     private fun handleStartFailure(action: String?, error: Exception) {
-        val message =
-            "Falha ao iniciar o serviço (" + error::class.java.simpleName + "): " +
-                (error.message ?: "sem detalhe adicional")
+        Log.e(TAG, "Falha ao iniciar Foreground Service para action=$action", error)
+        val message = ForegroundServiceTypePolicy.userFacingFailure(error)
         val current = store.load()
         if (current != null && (current.state == "RUNNING" || current.state == "CANCELLING")) {
             store.save(current.copy(state = "ERROR", message = message))
@@ -454,16 +454,12 @@ class MediaProcessingService : Service() {
     }
 
     private fun startAsForeground(notification: Notification) {
-        if (Build.VERSION.SDK_INT >= 35) {
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING,
-            )
-        } else {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, 0)
-        }
+        ServiceCompat.startForeground(
+            this,
+            NOTIFICATION_ID,
+            notification,
+            ForegroundServiceTypePolicy.typeForSdk(Build.VERSION.SDK_INT),
+        )
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
@@ -540,6 +536,7 @@ class MediaProcessingService : Service() {
         private const val EXTRA_CAUTION_ACCEPTED = "caution_accepted"
         private const val EXTRA_JOB_ID = "job_id"
 
+        private const val TAG = "GBW-MediaProcessing"
         private const val CHANNEL_ID = "gbw_media_processing"
         private const val NOTIFICATION_ID = 2301
         private const val MAX_WAKE_LOCK_MS = 6L * 60L * 60L * 1000L
