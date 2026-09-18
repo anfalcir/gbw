@@ -2,6 +2,7 @@ package com.gbw.android.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -61,6 +62,7 @@ import com.gbw.android.BuildConfig
 import com.gbw.android.audio.AudioInspectionDispatcher
 import com.gbw.android.background.JobStore
 import com.gbw.android.background.MediaProcessingService
+import com.gbw.android.background.WorkerExitDiagnostics
 import com.gbw.android.domain.AudioInspection
 import com.gbw.android.domain.AudioKind
 import com.gbw.android.domain.FilePitchRules
@@ -316,7 +318,7 @@ private fun SeparationScreen(
     var uriText by rememberSaveable(initialUriText) { mutableStateOf(initialUriText) }
     var technicalOpen by rememberSaveable { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
-    var jobState by remember { mutableStateOf(jobStore.load()) }
+    var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
     var modelCandidatePresent by remember {
         mutableStateOf(BsRoformerModelManager.candidateLooksInstalled(context))
     }
@@ -356,7 +358,7 @@ private fun SeparationScreen(
 
     LaunchedEffect(Unit) {
         while (isActive) {
-            jobState = jobStore.load()
+            jobState = jobStore.loadReconciled()
             modelCandidatePresent =
                 BsRoformerModelManager.candidateLooksInstalled(context)
             delay(500)
@@ -620,7 +622,7 @@ private fun FilePitchScreen() {
     var showCaution by remember { mutableStateOf(false) }
     var cautionAcceptedForRun by rememberSaveable { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
-    var jobState by remember { mutableStateOf(jobStore.load()) }
+    var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -676,7 +678,7 @@ private fun FilePitchScreen() {
 
     LaunchedEffect(Unit) {
         while (isActive) {
-            jobState = jobStore.load()
+            jobState = jobStore.loadReconciled()
             delay(500)
         }
     }
@@ -909,16 +911,20 @@ private fun SimpleDropdown(
 private fun SystemScreen() {
     val context = LocalContext.current
     val jobStore = remember(context) { JobStore(context) }
-    var jobState by remember { mutableStateOf(jobStore.load()) }
+    var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
     var launchError by remember { mutableStateOf<String?>(null) }
     var modelCandidatePresent by remember {
         mutableStateOf(BsRoformerModelManager.candidateLooksInstalled(context))
     }
+    var workerExitSummary by remember {
+        mutableStateOf(WorkerExitDiagnostics.latestSummary(context))
+    }
 
     LaunchedEffect(Unit) {
         while (isActive) {
-            jobState = jobStore.load()
+            jobState = jobStore.loadReconciled()
             modelCandidatePresent = BsRoformerModelManager.candidateLooksInstalled(context)
+            workerExitSummary = WorkerExitDiagnostics.latestSummary(context)
             delay(500)
         }
     }
@@ -939,8 +945,10 @@ private fun SystemScreen() {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Aplicativo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 StatusLine("Versão", BuildConfig.VERSION_NAME)
+                StatusLine("Android", "${Build.VERSION.RELEASE} • API ${Build.VERSION.SDK_INT}")
                 StatusLine("Baseline funcional", "Linux v5.23")
                 StatusLine("Separação padrão", "Rápida / Demucs")
+                StatusLine("Worker DSP", ":media isolado")
                 StatusLine("ABI inicial", "arm64-v8a")
             }
         }
@@ -995,6 +1003,13 @@ private fun SystemScreen() {
                 jobState?.let { job ->
                     StatusLine("Último job", "${job.state} • ${job.progress}%")
                     Text(job.message, style = MaterialTheme.typography.bodySmall)
+                }
+                workerExitSummary?.let {
+                    Text(
+                        "Última saída do worker: $it",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 launchError?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)

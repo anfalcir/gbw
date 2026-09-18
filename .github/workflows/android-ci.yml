@@ -106,6 +106,18 @@ jobs:
           echo "APK_NATIVE_DEMUCS_OK"
           echo "APK_NATIVE_BSROFORMER_SPECTRAL_OK"
 
+      - name: Verify merged worker manifest contract
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANIFEST="$(find app/build/intermediates -type f -name AndroidManifest.xml | grep -E '/(merged_manifest|merged_manifests|process.*Manifest)/' | head -1)"
+          test -n "$MANIFEST"
+          grep -Fq 'android:name="com.gbw.android.background.MediaProcessingService"' "$MANIFEST"
+          grep -Fq 'android:process=":media"' "$MANIFEST"
+          grep -Fq 'android:foregroundServiceType="dataSync"' "$MANIFEST"
+          echo "APK_WORKER_PROCESS_CONTRACT_OK"
+
       - name: Generate build metadata
         id: metadata
         working-directory: android

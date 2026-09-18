@@ -50,6 +50,10 @@ class MediaProcessingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
+        WorkerExitDiagnostics.markPhase(
+            this,
+            "service:" + (action?.substringAfterLast('.') ?: "unknown"),
+        )
         return try {
             when (action) {
                 ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
@@ -372,6 +376,7 @@ class MediaProcessingService : Service() {
 
     private fun startSelfTest() {
         if (activeJob?.isActive == true) return
+        WorkerExitDiagnostics.markPhase(this, "self-test")
         val persisted = PersistedJob(
             id = UUID.randomUUID().toString(),
             type = "background-self-test",

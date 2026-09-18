@@ -22,7 +22,7 @@
 
 ## Android
 
-Linha atual: **6.0.0-alpha4**.
+Linha atual: **6.0.0-alpha5**.
 
 ### Domínio/UI já portados
 
@@ -140,6 +140,9 @@ O manager implementa `.part`, Content-Length quando disponível, limite de bytes
 - o alpha4 padroniza o serviço em `dataSync` para API 29+, mantendo API 28 no caminho legado; `dataSync` cobre o processamento local de arquivos do GBW;
 - seleção não-WAV, incluindo M4A/AAC, usa `MediaExtractor` para inspeção inicial e não executa FFprobe/FFmpeg na UI; a decodificação completa permanece no pipeline controlado;
 - o self-test persiste mensagem amigável e registra a exceção completa no Logcat;
+- no alpha5, `MediaProcessingService` roda no processo dedicado `:media`, isolando UI de falhas nativas/pressão de memória dos motores;
+- `JobStore` usa arquivo JSON atômico com lock cross-process, substituindo SharedPreferences para progresso/estado compartilhado;
+- Android 11+ reconcilia mortes do worker via `ApplicationExitInfo`, incluindo crash nativo, sinal, memória, PSS/RSS e fase registrada;
 - `ForegroundService` é proprietário das tarefas pesadas;
 - Activity não é proprietária do job;
 - estado/progresso persistidos em `JobStore`;
@@ -216,8 +219,8 @@ Também permanecem como gates de desenvolvimento:
 
 ## Próximo gate
 
-1. repetir no tablet real o self-test com o alpha4 e confirmar `SUCCESS 100%`;
-2. iniciar a Separação Rápida e confirmar que o job sai de `0%` sem erro de tipo FGS;
+1. executar a Separação Rápida no alpha5; a UI deve permanecer viva mesmo se o worker nativo falhar;
+2. se o worker morrer, registrar a mensagem exibida em `Separação`/`Sistema` com motivo, fase e memória; se não morrer, confirmar avanço além de `demucs:model-load`;
 3. validar Home/outro app/tela bloqueada com o serviço ativo;
 4. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
 5. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;

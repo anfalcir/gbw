@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Debug
 import com.gbw.android.audio.FloatWavReader
 import com.gbw.android.audio.FloatWavWriter
+import com.gbw.android.background.WorkerExitDiagnostics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -62,18 +63,23 @@ internal object DemucsSeparator {
         var peakPssKb = Debug.getPss()
 
         try {
+            WorkerExitDiagnostics.markPhase(context, "demucs:model-check")
             val modelFile = DemucsModelManager.ensureReady(context) { progress, message ->
                 report((progress / 10.0).roundToInt(), message)
             }
             currentCoroutineContext().ensureActive()
             peakPssKb = maxOf(peakPssKb, Debug.getPss())
+            WorkerExitDiagnostics.markPhase(context, "demucs:model-ready")
 
             report(11, "Preparando áudio estéreo 44,1 kHz para htdemucs_6s…")
+            WorkerExitDiagnostics.markPhase(context, "demucs:audio-prep")
             val inputInfo = DemucsAudioIo.prepareInput(context, inputUri, preparedInput)
             currentCoroutineContext().ensureActive()
             report(14, "Carregando modelo htdemucs_6s…")
+            WorkerExitDiagnostics.markPhase(context, "demucs:model-load")
 
             modelHandle = DemucsNative.createModel(modelFile.absolutePath)
+            WorkerExitDiagnostics.markPhase(context, "demucs:model-loaded")
             peakPssKb = maxOf(peakPssKb, Debug.getPss())
             val runtimeIdentity = DemucsNative.identity()
             report(15, "Modelo carregado. Iniciando separação em seis stems…")
@@ -108,6 +114,10 @@ internal object DemucsSeparator {
                         )
                     }
 
+                    WorkerExitDiagnostics.markPhase(
+                        context,
+                        "demucs:infer:${plan.index + 1}/${plans.size}",
+                    )
                     val nativeOutput = DemucsNative.separateChunk(
                         handle = modelHandle,
                         interleavedStereo = inputWindow,
@@ -144,6 +154,7 @@ internal object DemucsSeparator {
             }
             openWriters = emptyList()
 
+            WorkerExitDiagnostics.markPhase(context, "demucs:validate")
             report(97, "Validando os seis stems…")
             stemFiles.forEach { (stem, file) ->
                 check(file.isFile && file.length() > 44L) { "Stem $stem não foi gerado" }
@@ -158,6 +169,7 @@ internal object DemucsSeparator {
             val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000L
             peakPssKb = maxOf(peakPssKb, Debug.getPss())
             report(100, "Separação Rápida concluída: 6 stems validados.")
+            WorkerExitDiagnostics.markPhase(context, "demucs:complete")
             success = true
             DemucsSeparationResult(
                 outputDirectory = outputDir,
