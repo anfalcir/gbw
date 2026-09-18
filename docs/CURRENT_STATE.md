@@ -22,7 +22,7 @@
 
 ## Android
 
-Linha atual: **6.0.0-alpha5**.
+Linha atual: **6.0.0-alpha6**.
 
 ### Domínio/UI já portados
 
@@ -143,6 +143,9 @@ O manager implementa `.part`, Content-Length quando disponível, limite de bytes
 - no alpha5, `MediaProcessingService` roda no processo dedicado `:media`, isolando UI de falhas nativas/pressão de memória dos motores;
 - `JobStore` usa arquivo JSON atômico com lock cross-process, substituindo SharedPreferences para progresso/estado compartilhado;
 - Android 11+ reconcilia mortes do worker via `ApplicationExitInfo`, incluindo crash nativo, sinal, memória, PSS/RSS e fase registrada;
+- homologação física do alpha5: UI sobreviveu, self-test chegou a `SUCCESS 100%`, e a Separação Rápida isolou `crash Java/Kotlin` em `demucs:audio-prep`;
+- alpha6 remove SAF direto do FFmpeg no worker: os pipelines fazem `content:// → cópia privada local → FFmpeg/FFprobe local`, com streaming, `fsync`, cleanup e execução síncrona controlada;
+- Demucs e BS-RoFormer marcam `audio-stage`, `audio-ffmpeg` e `audio-validate` separadamente para diagnóstico físico;
 - `ForegroundService` é proprietário das tarefas pesadas;
 - Activity não é proprietária do job;
 - estado/progresso persistidos em `JobStore`;
@@ -219,8 +222,8 @@ Também permanecem como gates de desenvolvimento:
 
 ## Próximo gate
 
-1. executar a Separação Rápida no alpha5; a UI deve permanecer viva mesmo se o worker nativo falhar;
-2. se o worker morrer, registrar a mensagem exibida em `Separação`/`Sistema` com motivo, fase e memória; se não morrer, confirmar avanço além de `demucs:model-load`;
+1. executar a Separação Rápida no alpha6 com o mesmo M4A e confirmar avanço por `audio-stage` → `audio-ffmpeg` → `audio-validate`;
+2. se houver nova falha, registrar a fase exata exibida; se a preparação passar, observar `demucs:model-load` e a primeira inferência;
 3. validar Home/outro app/tela bloqueada com o serviço ativo;
 4. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
 5. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;

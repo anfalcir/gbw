@@ -4,7 +4,7 @@ Reimplementação Android nativa do Guitar Backing Wizard, tendo **GBW Linux 5.2
 
 ## Estado
 
-Versão de desenvolvimento: `6.0.0-alpha5`.
+Versão de desenvolvimento: `6.0.0-alpha6`.
 
 O Android já possui três fluxos DSP/ML centrais implementados digitalmente:
 
@@ -25,7 +25,7 @@ A linha continua alpha porque a Alta qualidade ainda precisa do gate runtime arm
 - NDK `27.2.12479018`.
 - CMake `3.22.1`.
 - Storage Access Framework para arquivos do usuário.
-- Foreground Service `mediaProcessing` para tarefas longas.
+- Foreground Service `dataSync` em processo dedicado `:media` para tarefas longas.
 - FFmpegKit como camada de inspeção/codec/conversão.
 - Rubber Band Library `4.0.0` @ `1d95888bec3ae0a17c0c4af791810d5a63f6bc35`.
 - `demucs.cpp` @ `f1206e9adeea103aef4a636b9e62297cf1f8e34e`.
@@ -37,6 +37,7 @@ A linha continua alpha porque a Alta qualidade ainda precisa do gate runtime arm
 ```text
 SAF input
 → inspeção Ideal/Adequado/Ressalva
+→ cópia privada local em streaming + fsync
 → FFmpeg prepara WAV float32 mantendo sample rate/canais
 → Rubber Band R3 offline em duas passagens
 → valida duração/sample rate/canais
