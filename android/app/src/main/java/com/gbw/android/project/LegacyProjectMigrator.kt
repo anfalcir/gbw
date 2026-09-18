@@ -32,7 +32,7 @@ internal class LegacyProjectMigrator(private val context: Context) {
         if (prepared != null && prepared.preparedFile().isFile) {
             project = repository.adoptPreparedSource(prepared, name, "", "")
         }
-        if (separation != null) project = repository.publishSeparation(separation)
+        if (separation != null) project = repository.publishSeparation(project.projectId, separation)
         writeMarker(project.projectId, "success")
         project
     }

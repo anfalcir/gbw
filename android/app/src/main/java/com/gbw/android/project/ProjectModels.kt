@@ -100,7 +100,7 @@ fun isCanonicalProjectId(value: String): Boolean =
     runCatching { UUID.fromString(value).toString() == value.lowercase() }.getOrDefault(false)
 
 fun sanitizeProjectName(value: String): String {
-    val cleaned = value.trim().replace(Regex("[\u0000-\u001f]"), " ").replace(Regex("\s+"), " ")
+    val cleaned = value.trim().replace(Regex("[\u0000-\u001f]"), " ").replace(Regex("\\s+"), " ")
     return cleaned.take(120).ifBlank { "Projeto sem nome" }
 }
 
