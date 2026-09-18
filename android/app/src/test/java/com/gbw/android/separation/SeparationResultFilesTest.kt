@@ -13,7 +13,7 @@ class SeparationResultFilesTest {
     val temp = TemporaryFolder()
 
     @Test
-    fun \`quick and high quality directories are deterministic\`() {
+    fun quickAndHighQualityDirectoriesAreDeterministic() {
         val root = temp.root
         assertEquals(
             "jobs/job-123/separation/quick",
@@ -29,7 +29,7 @@ class SeparationResultFilesTest {
     }
 
     @Test
-    fun \`validated result requires all six aligned float stems\`() {
+    fun validatedResultRequiresAllSixAlignedFloatStems() {
         val root = temp.newFolder("files")
         val record = StoredSeparationResult(
             jobId = "job-six",
