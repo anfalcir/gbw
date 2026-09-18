@@ -66,6 +66,8 @@ import com.gbw.android.audio.AudioInspectionDispatcher
 import com.gbw.android.background.JobStore
 import com.gbw.android.background.MediaProcessingService
 import com.gbw.android.background.WorkerExitDiagnostics
+import com.gbw.android.backup.BackupScheduler
+import com.gbw.android.backup.BackupSettingsStore
 import com.gbw.android.domain.AudioInspection
 import com.gbw.android.domain.AudioKind
 import com.gbw.android.domain.FilePitchRules
@@ -85,9 +87,15 @@ import com.gbw.android.separation.StemPreviewPlayer
 import com.gbw.android.separation.ValidatedSeparationResult
 import com.gbw.android.source.SourceSearchCoordinator
 import com.gbw.android.source.PreparedSourceStore
+import com.gbw.android.project.LegacyProjectMigrator
+import com.gbw.android.project.ProjectJobLinkStore
+import com.gbw.android.project.ProjectRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.UUID
 
 private const val SEPARATION_STARTED_MESSAGE = "Separação iniciada em segundo plano."
 
@@ -110,6 +118,17 @@ fun GbwApp() {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
             var page by rememberSaveable { mutableStateOf(AppPage.SOURCE.name) }
             var sourceUri by rememberSaveable { mutableStateOf("") }
+            val context = LocalContext.current
+            val projectRepository = remember(context) { ProjectRepository(context) }
+            LaunchedEffect(Unit) {
+                withContext(Dispatchers.IO) { LegacyProjectMigrator(context).migrateIfNeeded() }
+                BackupScheduler.applySettings(context, BackupSettingsStore(context).load())
+                if (sourceUri.isBlank()) {
+                    sourceUri = withContext(Dispatchers.IO) {
+                        projectRepository.active()?.let { projectRepository.projectSourceUri(it.projectId)?.toString() }.orEmpty()
+                    }
+                }
+            }
             val current = AppPage.valueOf(page)
             val configuration = LocalConfiguration.current
             val wide = configuration.screenWidthDp >= 840
@@ -212,12 +231,15 @@ private fun PageContent(
                     initialUriText = sourceUri,
                     onUriChanged = onSourceUriChange,
                 )
-                AppPage.TUNING -> PlaceholderScreen("Afinação & Pitch", "Regras de afinação da v5.23 já foram portadas para o domínio Android.")
-                AppPage.EXPORT -> PlaceholderScreen("Exportação", "A estrutura de exportação será ligada aos engines de áudio após FFmpeg/R3.")
-                AppPage.PROJECTS -> PlaceholderScreen("Projetos", "Persistência cross-platform/SAF entra no M3, preservando a v5.23 como referência.")
+                AppPage.TUNING -> ProjectTuningScreen()
+                AppPage.EXPORT -> ProjectExportScreen()
+                AppPage.PROJECTS -> ProjectsScreen { uri ->
+                    onSourceUriChange(uri)
+                    onNavigate(AppPage.SOURCE)
+                }
                 AppPage.LOGS -> PlaceholderScreen("Logs", "Logs de jobs e processamento serão persistidos por operação.")
                 AppPage.FILE_PITCH -> FilePitchScreen()
-                AppPage.SETTINGS -> PlaceholderScreen("Configurações", "As preferências do fluxo Android permanecem alinhadas à v5.23 sem seleção de motor de separação.")
+                AppPage.SETTINGS -> BackupSettingsScreen()
                 AppPage.SYSTEM -> SystemScreen()
             }
         }
@@ -239,7 +261,10 @@ private fun SourceScreen(
     val searchState: SourceSearchViewModel = viewModel()
     val sourceJobStore = remember(context) { JobStore(context) }
     val preparedSourceStore = remember(context) { PreparedSourceStore(context) }
+    val projectRepository = remember(context) { ProjectRepository(context) }
+    val projectLinks = remember(context) { ProjectJobLinkStore(context) }
     var sourceJobState by remember { mutableStateOf(sourceJobStore.loadReconciled()) }
+    var incorporatingLocal by remember { mutableStateOf(false) }
     var consumedPreparedJobId by rememberSaveable { mutableStateOf("") }
     var autoContinuePrepared by rememberSaveable { mutableStateOf(false) }
     val selectedDisplayName = remember(selectedUriText) {
@@ -270,10 +295,27 @@ private fun SourceScreen(
             ) {
                 val prepared = preparedSourceStore.load()
                 if (prepared?.jobId == job.id && prepared.preparedFile().isFile) {
-                    consumedPreparedJobId = job.id
-                    autoContinuePrepared = true
-                    onSelectedUri(preparedSourceStore.contentUri(prepared).toString())
-                    searchState.updateMessage("Fonte online baixada e preparada com sucesso.")
+                    try {
+                        val project = withContext(Dispatchers.IO) {
+                            projectLinks.projectId(job.id)?.let(projectRepository::setActive)
+                            projectRepository.adoptPreparedSource(
+                                record = prepared,
+                                name = searchState.song.ifBlank { prepared.title },
+                                artist = searchState.artist,
+                                song = searchState.song,
+                            )
+                        }
+                        val managedUri = withContext(Dispatchers.IO) {
+                            requireNotNull(projectRepository.projectSourceUri(project.projectId)).toString()
+                        }
+                        projectLinks.remove(job.id)
+                        consumedPreparedJobId = job.id
+                        autoContinuePrepared = true
+                        onSelectedUri(managedUri)
+                        searchState.updateMessage("Fonte online incorporada ao projeto e preparada com sucesso.")
+                    } catch (error: Exception) {
+                        searchState.updateMessage(error.message ?: "Falha ao incorporar a fonte ao projeto.")
+                    }
                 }
             }
             delay(750)
@@ -458,6 +500,17 @@ private fun SourceScreen(
                     Button(
                         onClick = {
                             val candidate = searchState.selectedCandidate() ?: return@Button
+                            val project = projectRepository.active()
+                                ?: projectRepository.create(
+                                    name = searchState.song.ifBlank { candidate.title },
+                                    artist = searchState.artist,
+                                    song = searchState.song,
+                                )
+                            if (searchState.artist.isNotBlank() || searchState.song.isNotBlank()) {
+                                projectRepository.updateMetadata(project.projectId, searchState.artist, searchState.song)
+                            }
+                            val jobId = UUID.randomUUID().toString()
+                            projectLinks.link(jobId, project.projectId)
                             val intent = MediaProcessingService.sourcePrepareIntent(
                                 context = context,
                                 url = candidate.url,
@@ -465,6 +518,7 @@ private fun SourceScreen(
                                 formatId = candidate.formatId,
                                 expectedDurationSeconds = candidate.durationSeconds,
                                 title = candidate.title,
+                                jobId = jobId,
                             )
                             ContextCompat.startForegroundService(context, intent)
                             sourceJobState = sourceJobStore.loadReconciled()
@@ -564,6 +618,17 @@ private fun SourceScreen(
                         if (uri == null) {
                             searchState.updateMessage("Informe uma URL válida iniciando com http:// ou https://.")
                         } else {
+                            val project = projectRepository.active()
+                                ?: projectRepository.create(
+                                    name = searchState.song.ifBlank { "Fonte por URL" },
+                                    artist = searchState.artist,
+                                    song = searchState.song,
+                                )
+                            if (searchState.artist.isNotBlank() || searchState.song.isNotBlank()) {
+                                projectRepository.updateMetadata(project.projectId, searchState.artist, searchState.song)
+                            }
+                            val jobId = UUID.randomUUID().toString()
+                            projectLinks.link(jobId, project.projectId)
                             val intent = MediaProcessingService.sourcePrepareIntent(
                                 context = context,
                                 url = uri.toString(),
@@ -571,6 +636,7 @@ private fun SourceScreen(
                                 formatId = "",
                                 expectedDurationSeconds = 0.0,
                                 title = searchState.song.trim(),
+                                jobId = jobId,
                             )
                             ContextCompat.startForegroundService(context, intent)
                             searchState.updateMessage("Preparando URL manual em segundo plano…")
@@ -586,10 +652,44 @@ private fun SourceScreen(
         }
 
         Button(
-            onClick = onContinue,
-            enabled = selectedUriText.isNotBlank() && inspection != null && inspectionError == null && !inspecting,
+            onClick = {
+                if (incorporatingLocal) return@Button
+                incorporatingLocal = true
+                onlineScope.launch {
+                    try {
+                        val selected = Uri.parse(selectedUriText)
+                        val active = withContext(Dispatchers.IO) { projectRepository.active() }
+                        val alreadyManaged = active?.let {
+                            withContext(Dispatchers.IO) { projectRepository.projectSourceUri(it.projectId)?.toString() }
+                        } == selectedUriText
+                        val project = if (alreadyManaged) {
+                            requireNotNull(active)
+                        } else {
+                            withContext(Dispatchers.IO) {
+                                projectRepository.adoptLocalSource(
+                                    uri = selected,
+                                    displayNameHint = selectedDisplayName,
+                                    name = searchState.song.ifBlank { selectedDisplayName ?: "Novo projeto" },
+                                    artist = searchState.artist,
+                                    song = searchState.song,
+                                )
+                            }
+                        }
+                        val managed = withContext(Dispatchers.IO) {
+                            requireNotNull(projectRepository.projectSourceUri(project.projectId)).toString()
+                        }
+                        onSelectedUri(managed)
+                        onContinue()
+                    } catch (error: Exception) {
+                        searchState.updateMessage(error.message ?: "Falha ao incorporar a fonte local ao projeto.")
+                    } finally {
+                        incorporatingLocal = false
+                    }
+                }
+            },
+            enabled = selectedUriText.isNotBlank() && inspection != null && inspectionError == null && !inspecting && !incorporatingLocal,
         ) {
-            Text("Continuar para Separação")
+            Text(if (incorporatingLocal) "Incorporando fonte…" else "Continuar para Separação")
         }
     }
 }
@@ -690,6 +790,8 @@ private fun SeparationScreen(
     val context = LocalContext.current
     val jobStore = remember(context) { JobStore(context) }
     val resultStore = remember(context) { SeparationResultStore(context) }
+    val projectRepository = remember(context) { ProjectRepository(context) }
+    val projectLinks = remember(context) { ProjectJobLinkStore(context) }
     val previewPlayer = remember { StemPreviewPlayer() }
     val scope = rememberCoroutineScope()
     var availableResult by remember { mutableStateOf<ValidatedSeparationResult?>(null) }
@@ -699,6 +801,7 @@ private fun SeparationScreen(
     var uriText by rememberSaveable(initialUriText) { mutableStateOf(initialUriText) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
+    var startingSeparation by remember { mutableStateOf(false) }
     val selectedDisplayName = remember(uriText) {
         uriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
     }
@@ -770,9 +873,22 @@ private fun SeparationScreen(
             jobState = jobStore.loadReconciled()
             val storedRecord = resultStore.load()
             if (storedRecord?.jobId != availableResult?.record?.jobId) {
-                availableResult = storedRecord?.let {
+                val validated = storedRecord?.let {
                     SeparationResultFiles.validate(context.filesDir, it)
                 }
+                if (validated != null) {
+                    projectLinks.projectId(validated.record.jobId)?.let { projectId ->
+                        try {
+                            withContext(Dispatchers.IO) {
+                                projectRepository.publishSeparation(projectId, validated)
+                            }
+                            projectLinks.remove(validated.record.jobId)
+                        } catch (error: Exception) {
+                            resultMessage = error.message ?: "Falha ao publicar stems no projeto."
+                        }
+                    }
+                }
+                availableResult = validated
             }
             if (availableResult == null) {
                 availableResult = jobState
@@ -851,17 +967,50 @@ private fun SeparationScreen(
                 val input = uriText.takeIf { it.isNotBlank() }?.let(Uri::parse)
                 if (input == null) {
                     resultMessage = "Selecione um arquivo de áudio antes de iniciar."
-                } else {
-                    ContextCompat.startForegroundService(
-                        context,
-                        MediaProcessingService.demucsIntent(context, input),
-                    )
-                    resultMessage = SEPARATION_STARTED_MESSAGE
+                } else if (!startingSeparation) {
+                    startingSeparation = true
+                    scope.launch {
+                        var jobId: String? = null
+                        try {
+                            val prepared = withContext(Dispatchers.IO) {
+                                val active = projectRepository.active()
+                                val activeUri = active?.let { projectRepository.projectSourceUri(it.projectId)?.toString() }
+                                val project = if (active != null && activeUri == input.toString()) {
+                                    active
+                                } else {
+                                    projectRepository.adoptLocalSource(
+                                        uri = input,
+                                        displayNameHint = selectedDisplayName,
+                                        name = selectedDisplayName ?: "Novo projeto",
+                                        artist = active?.artist.orEmpty(),
+                                        song = active?.song.orEmpty(),
+                                    )
+                                }
+                                val managedUri = requireNotNull(projectRepository.projectSourceUri(project.projectId))
+                                val newJobId = UUID.randomUUID().toString()
+                                projectLinks.link(newJobId, project.projectId)
+                                Triple(project, managedUri, newJobId)
+                            }
+                            jobId = prepared.third
+                            uriText = prepared.second.toString()
+                            onUriChanged(uriText)
+                            ContextCompat.startForegroundService(
+                                context,
+                                MediaProcessingService.demucsIntent(context, prepared.second, prepared.third),
+                            )
+                            resultMessage = SEPARATION_STARTED_MESSAGE
+                        } catch (error: Exception) {
+                            jobId?.let(projectLinks::remove)
+                            resultMessage = error.message ?: "Falha ao iniciar a separação."
+                        } finally {
+                            startingSeparation = false
+                        }
+                    }
                 }
             },
-            enabled = uriText.isNotBlank() && !appJobBusy,
+            enabled = uriText.isNotBlank() && !appJobBusy && !startingSeparation,
         ) {
-            Text("Separar")
+            Text(if (startingSeparation) "Preparando…" else "Separar")
         }
 
         separationJob?.let { job ->

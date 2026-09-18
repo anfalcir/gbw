@@ -22,6 +22,7 @@ import com.gbw.android.audio.FilePitchRenderer
 import com.gbw.android.domain.AudioKind
 import com.gbw.android.domain.OutputFormat
 import com.gbw.android.domain.SourceProvider
+import com.gbw.android.export.ProjectExportRenderer
 import com.gbw.android.separation.DemucsNative
 import com.gbw.android.separation.DemucsSeparator
 import com.gbw.android.separation.DemucsRuntimeMonitor
@@ -70,11 +71,13 @@ class MediaProcessingService : Service() {
                 ACTION_FILE_PITCH -> startFilePitch(requireNotNull(intent), flags)
                 ACTION_SOURCE_PREPARE -> startSourcePrepare(requireNotNull(intent), flags)
                 ACTION_DEMUCS -> startDemucs(requireNotNull(intent), flags)
+                ACTION_PROJECT_EXPORT -> startProjectExport(requireNotNull(intent), flags)
             }
             if (
                 action == ACTION_FILE_PITCH ||
                 action == ACTION_SOURCE_PREPARE ||
-                action == ACTION_DEMUCS
+                action == ACTION_DEMUCS ||
+                action == ACTION_PROJECT_EXPORT
             ) {
                 START_REDELIVER_INTENT
             } else {
@@ -163,6 +166,62 @@ class MediaProcessingService : Service() {
                 finishCancelledIfRunning("Processamento cancelado com cleanup concluído.")
             } catch (error: Exception) {
                 finishError(persisted, error.message ?: "Falha inesperada no Pitch de Arquivo.")
+            } finally {
+                finishForegroundJob()
+            }
+        }
+    }
+
+
+    private fun startProjectExport(intent: Intent, startFlags: Int) {
+        if (activeJob?.isActive == true) return
+        val projectId = intent.getStringExtra(EXTRA_PROJECT_ID).orEmpty()
+        val outputFormat = intent.getStringExtra(EXTRA_OUTPUT_FORMAT)?.let {
+            runCatching { OutputFormat.valueOf(it) }.getOrNull()
+        }
+        val includeOriginal = intent.getBooleanExtra(EXTRA_EXPORT_ORIGINAL, true)
+        val includePitched = intent.getBooleanExtra(EXTRA_EXPORT_PITCHED, true)
+        if (projectId.isBlank() || outputFormat == null || (!includeOriginal && !includePitched)) {
+            saveInvalid(PROJECT_EXPORT_TYPE, "Exportação do projeto", "Parâmetros inválidos para iniciar a exportação.")
+            return
+        }
+
+        val persisted = PersistedJob(
+            id = intent.getStringExtra(EXTRA_JOB_ID) ?: UUID.randomUUID().toString(),
+            type = PROJECT_EXPORT_TYPE,
+            label = "Exportação do projeto",
+            state = "RUNNING",
+            progress = 0,
+            startedAt = System.currentTimeMillis(),
+            message = if ((startFlags and START_FLAG_REDELIVERY) != 0) {
+                "Retomando exportação após reinício do processo…"
+            } else {
+                "Preparando backing + guitar…"
+            },
+        )
+        store.save(persisted)
+        startAsForeground(notification(persisted))
+        acquireWakeLock()
+
+        activeJob = scope.launch {
+            try {
+                val result = ProjectExportRenderer.render(
+                    context = this@MediaProcessingService,
+                    projectId = projectId,
+                    includeOriginal = includeOriginal,
+                    includePitched = includePitched,
+                    outputFormat = outputFormat,
+                ) { progress, message ->
+                    updateJob(persisted, progress, message)
+                }
+                finishSuccess(
+                    persisted,
+                    "Concluído • ${result.state.artifacts.size} arquivo(s) • backing + guitar com ganho compartilhado.",
+                )
+            } catch (cancelled: CancellationException) {
+                finishCancelledIfRunning("Exportação cancelada; arquivos parciais removidos.")
+            } catch (error: Exception) {
+                finishError(persisted, error.message ?: "Falha inesperada na exportação do projeto.")
             } finally {
                 finishForegroundJob()
             }
@@ -493,6 +552,7 @@ class MediaProcessingService : Service() {
         const val ACTION_FILE_PITCH = "com.gbw.android.action.FILE_PITCH"
         const val ACTION_SOURCE_PREPARE = "com.gbw.android.action.SOURCE_PREPARE"
         const val ACTION_DEMUCS = "com.gbw.android.action.DEMUCS"
+        const val ACTION_PROJECT_EXPORT = "com.gbw.android.action.PROJECT_EXPORT"
 
         private const val EXTRA_INPUT_URI = "input_uri"
         private const val EXTRA_OUTPUT_URI = "output_uri"
@@ -506,8 +566,12 @@ class MediaProcessingService : Service() {
         private const val EXTRA_SOURCE_FORMAT_ID = "source_format_id"
         private const val EXTRA_SOURCE_DURATION = "source_duration"
         private const val EXTRA_SOURCE_TITLE = "source_title"
+        private const val EXTRA_PROJECT_ID = "project_id"
+        private const val EXTRA_EXPORT_ORIGINAL = "export_original"
+        private const val EXTRA_EXPORT_PITCHED = "export_pitched"
 
         const val SOURCE_PREPARE_TYPE = "source-prepare"
+        const val PROJECT_EXPORT_TYPE = "project-export"
 
         private const val TAG = "GBW-MediaProcessing"
         private const val CHANNEL_ID = "gbw_media_processing"
@@ -548,6 +612,22 @@ class MediaProcessingService : Service() {
             .putExtra(EXTRA_SOURCE_FORMAT_ID, formatId)
             .putExtra(EXTRA_SOURCE_DURATION, expectedDurationSeconds)
             .putExtra(EXTRA_SOURCE_TITLE, title)
+            .putExtra(EXTRA_JOB_ID, jobId)
+
+
+        fun projectExportIntent(
+            context: Context,
+            projectId: String,
+            includeOriginal: Boolean,
+            includePitched: Boolean,
+            outputFormat: OutputFormat,
+            jobId: String = UUID.randomUUID().toString(),
+        ): Intent = Intent(context, MediaProcessingService::class.java)
+            .setAction(ACTION_PROJECT_EXPORT)
+            .putExtra(EXTRA_PROJECT_ID, projectId)
+            .putExtra(EXTRA_EXPORT_ORIGINAL, includeOriginal)
+            .putExtra(EXTRA_EXPORT_PITCHED, includePitched)
+            .putExtra(EXTRA_OUTPUT_FORMAT, outputFormat.name)
             .putExtra(EXTRA_JOB_ID, jobId)
 
         fun demucsIntent(

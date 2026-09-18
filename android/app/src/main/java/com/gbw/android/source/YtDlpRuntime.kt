@@ -77,7 +77,38 @@ internal object YtDlpRuntime {
         }
     }
 
+    suspend fun updateNightly(context: Context, force: Boolean = false): String? = withContext(Dispatchers.IO) {
+        ensureInitialized(context)
+        val prefs = context.applicationContext.getSharedPreferences("gbw_ytdlp_runtime", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val last = prefs.getLong("lastNightlyUpdateCheck", 0L)
+        if (!force && now - last < UPDATE_CHECK_INTERVAL_MS) {
+            return@withContext YoutubeDL.getInstance().versionName(context.applicationContext)
+        }
+        synchronized(UPDATE_LOCK) {
+            val currentLast = prefs.getLong("lastNightlyUpdateCheck", 0L)
+            if (!force && now - currentLast < UPDATE_CHECK_INTERVAL_MS) {
+                return@synchronized
+            }
+            runCatching {
+                YoutubeDL.getInstance().updateYoutubeDL(
+                    context.applicationContext,
+                    YoutubeDL.UpdateChannel.NIGHTLY,
+                )
+            }.onSuccess {
+                prefs.edit().putLong("lastNightlyUpdateCheck", now).commit()
+            }
+        }
+        YoutubeDL.getInstance().versionName(context.applicationContext)
+    }
+
+    fun versionName(context: Context): String? =
+        runCatching { YoutubeDL.getInstance().versionName(context.applicationContext) }.getOrNull()
+
     fun cancel(processId: String) {
         runCatching { YoutubeDL.getInstance().destroyProcessById(processId) }
     }
+
+    private const val UPDATE_CHECK_INTERVAL_MS = 12L * 60L * 60L * 1000L
+    private val UPDATE_LOCK = Any()
 }

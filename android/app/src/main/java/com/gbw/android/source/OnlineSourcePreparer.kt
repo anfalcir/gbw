@@ -56,48 +56,87 @@ object OnlineSourcePreparer {
             }
             currentCoroutineContext().ensureActive()
 
-            val chosenFormat =
-                request.formatId.takeIf { it.isNotBlank() }
-                    ?: inspected.formatId.takeIf { it.isNotBlank() }
+            val freshFormat =
+                inspected.formatId.takeIf { it.isNotBlank() }
+                    ?: request.formatId.takeIf { it.isNotBlank() }
                     ?: "bestaudio/best"
             val expectedDuration =
                 request.expectedDurationSeconds.takeIf { it > 0.0 }
                     ?: inspected.durationSeconds.takeIf { it > 0.0 }
                     ?: 0.0
 
-            val processId = processId(jobId)
-            val template = File(nativeDir, "original.%(ext)s").absolutePath
-            onProgress(7, "Baixando a melhor fonte selecionada…")
-            YtDlpRuntime.execute(
-                context = context,
-                target = request.url,
-                options = listOf(
-                    "-f" to chosenFormat,
-                    "--no-playlist" to null,
-                    "--write-info-json" to null,
-                    "--newline" to null,
-                    "--no-part" to null,
-                    "-o" to template,
-                ),
-                processId = processId,
-            ) { progress, eta, line ->
-                val mapped = (7 + progress.coerceIn(0f, 100f) * 0.63f).toInt().coerceIn(7, 70)
-                val etaText = if (eta > 0) " • ~" + eta + "s restantes" else ""
-                val detail = line.trim().takeIf { it.isNotBlank() }?.take(110)
-                onProgress(
-                    mapped,
-                    buildString {
-                        append("Download ")
-                        append(progress.coerceIn(0f, 100f).toInt())
-                        append("%")
-                        append(etaText)
-                        if (!detail.isNullOrBlank()) {
-                            append(" • ")
-                            append(detail)
-                        }
-                    },
-                )
+            // Discovery metadata is advisory only. At acquisition time the format is
+            // re-inspected and each retry starts from a clean directory so an expired
+            // YouTube media URL/format choice cannot leak into the next attempt.
+            runCatching { YtDlpRuntime.updateNightly(context, force = false) }
+            val attempts = YtDlpDownloadStrategy.attempts(request.provider, freshFormat)
+            var chosenFormat = freshFormat
+            var lastFailure: Throwable? = null
+            for ((index, attempt) in attempts.withIndex()) {
+                currentCoroutineContext().ensureActive()
+                nativeDir.deleteRecursively()
+                nativeDir.mkdirs()
+                if (attempt.forceRuntimeUpdateBefore) {
+                    onProgress(7, "Atualizando o motor de aquisição do YouTube…")
+                    runCatching { YtDlpRuntime.updateNightly(context, force = true) }
+                    // Re-inspect after update; yt-dlp can expose a different set of
+                    // formats/clients than the one observed during ranking.
+                    runCatching {
+                        YtDlpDiscoveryProvider(context).inspectUrl(request.url, request.provider)
+                    }.getOrNull()?.formatId?.takeIf { it.isNotBlank() }?.let {
+                        if (attempt.name == "youtube-fresh-default") chosenFormat = it
+                    }
+                }
+                val format = if (index == 0) freshFormat else attempt.format
+                chosenFormat = format
+                val processId = processId(jobId) + "-a" + index
+                val template = File(nativeDir, "original.%(ext)s").absolutePath
+                onProgress(7, "Baixando fonte • tentativa ${index + 1}/${attempts.size}…")
+                try {
+                    val options = mutableListOf<Pair<String, String?>>(
+                        "-f" to format,
+                        "--no-playlist" to null,
+                        "--write-info-json" to null,
+                        "--newline" to null,
+                        "--no-part" to null,
+                        "--retries" to "2",
+                        "--fragment-retries" to "2",
+                        "--socket-timeout" to "20",
+                        "-o" to template,
+                    )
+                    attempt.extractorArgs?.let { options += "--extractor-args" to it }
+                    YtDlpRuntime.execute(
+                        context = context,
+                        target = request.url,
+                        options = options,
+                        processId = processId,
+                    ) { progress, eta, line ->
+                        val mapped = (7 + progress.coerceIn(0f, 100f) * 0.63f).toInt().coerceIn(7, 70)
+                        val etaText = if (eta > 0) " • ~" + eta + "s restantes" else ""
+                        val detail = line.trim().takeIf { it.isNotBlank() }?.take(110)
+                        onProgress(
+                            mapped,
+                            buildString {
+                                append("Download ")
+                                append(progress.coerceIn(0f, 100f).toInt())
+                                append("%")
+                                append(etaText)
+                                if (!detail.isNullOrBlank()) {
+                                    append(" • ")
+                                    append(detail)
+                                }
+                            },
+                        )
+                    }
+                    lastFailure = null
+                    break
+                } catch (error: Throwable) {
+                    lastFailure = error
+                    if (!YtDlpDownloadStrategy.retryable(error) || index == attempts.lastIndex) throw error
+                    onProgress(7, "YouTube recusou esta rota; tentando uma rota compatível…")
+                }
             }
+            if (lastFailure != null) throw lastFailure
             currentCoroutineContext().ensureActive()
 
             val native =
@@ -163,7 +202,9 @@ object OnlineSourcePreparer {
     }
 
     fun cancel(jobId: String) {
-        YtDlpRuntime.cancel(processId(jobId))
+        val base = processId(jobId)
+        YtDlpRuntime.cancel(base)
+        repeat(4) { YtDlpRuntime.cancel(base + "-a" + it) }
     }
 
     private suspend fun probeAudio(file: File): SourceAudioProbe {
