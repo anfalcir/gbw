@@ -92,6 +92,7 @@ fun GbwApp() {
     GbwTheme {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
             var page by rememberSaveable { mutableStateOf(AppPage.SOURCE.name) }
+            var sourceUri by rememberSaveable { mutableStateOf("") }
             val current = AppPage.valueOf(page)
             val configuration = LocalConfiguration.current
             val wide = configuration.screenWidthDp >= 840
@@ -102,7 +103,13 @@ fun GbwApp() {
                 Row(Modifier.fillMaxSize()) {
                     SideBar(current, onSelect = { page = it.name }, Modifier.width(260.dp).fillMaxHeight())
                     Divider(Modifier.fillMaxHeight().width(1.dp))
-                    PageContent(current, Modifier.weight(1f))
+                    PageContent(
+                        page = current,
+                        sourceUri = sourceUri,
+                        onSourceUriChange = { sourceUri = it },
+                        onNavigate = { page = it.name },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             } else {
                 ModalNavigationDrawer(
@@ -125,7 +132,15 @@ fun GbwApp() {
                                 }
                             )
                         }
-                    ) { padding -> PageContent(current, Modifier.padding(padding)) }
+                    ) { padding ->
+                        PageContent(
+                            page = current,
+                            sourceUri = sourceUri,
+                            onSourceUriChange = { sourceUri = it },
+                            onNavigate = { page = it.name },
+                            modifier = Modifier.padding(padding),
+                        )
+                    }
                 }
             }
         }
@@ -158,15 +173,28 @@ private fun SideBar(current: AppPage, onSelect: (AppPage) -> Unit, modifier: Mod
 }
 
 @Composable
-private fun PageContent(page: AppPage, modifier: Modifier = Modifier) {
+private fun PageContent(
+    page: AppPage,
+    sourceUri: String,
+    onSourceUriChange: (String) -> Unit,
+    onNavigate: (AppPage) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Box(
         modifier = modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 20.dp),
         contentAlignment = Alignment.TopCenter,
     ) {
         Box(Modifier.fillMaxWidth().widthIn(max = 1120.dp)) {
             when (page) {
-                AppPage.SOURCE -> PlaceholderScreen("Fonte", "Aquisição local/online será conectada após o gate de download Android.")
-                AppPage.SEPARATION -> SeparationScreen()
+                AppPage.SOURCE -> SourceScreen(
+                    selectedUriText = sourceUri,
+                    onSelectedUri = onSourceUriChange,
+                    onContinue = { onNavigate(AppPage.SEPARATION) },
+                )
+                AppPage.SEPARATION -> SeparationScreen(
+                    initialUriText = sourceUri,
+                    onUriChanged = onSourceUriChange,
+                )
                 AppPage.TUNING -> PlaceholderScreen("Afinação & Pitch", "Regras de afinação da v5.23 já foram portadas para o domínio Android.")
                 AppPage.EXPORT -> PlaceholderScreen("Exportação", "A estrutura de exportação será ligada aos engines de áudio após FFmpeg/R3.")
                 AppPage.PROJECTS -> PlaceholderScreen("Projetos", "Persistência cross-platform/SAF entra no M3, preservando a v5.23 como referência.")
@@ -180,6 +208,96 @@ private fun PageContent(page: AppPage, modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun SourceScreen(
+    selectedUriText: String,
+    onSelectedUri: (String) -> Unit,
+    onContinue: () -> Unit,
+) {
+    val context = LocalContext.current
+    var inspection by remember { mutableStateOf<AudioInspection?>(null) }
+    var inspectionError by remember { mutableStateOf<String?>(null) }
+    var inspecting by remember { mutableStateOf(false) }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: Exception) {
+            }
+            onSelectedUri(uri.toString())
+        }
+    }
+
+    LaunchedEffect(selectedUriText) {
+        inspection = null
+        inspectionError = null
+        if (selectedUriText.isBlank()) return@LaunchedEffect
+        inspecting = true
+        try {
+            inspection = AudioInspectionDispatcher.inspect(context, Uri.parse(selectedUriText))
+        } catch (error: Exception) {
+            inspectionError = error.message ?: "Falha ao analisar o arquivo selecionado."
+        } finally {
+            inspecting = false
+        }
+    }
+
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text("Fonte", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Escolha o áudio que será usado no fluxo do GBW. A seleção local já usa o SAF e permanece disponível para a etapa de Separação.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Arquivo local", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Button(onClick = { picker.launch(arrayOf("audio/*")) }) {
+                    Text(if (selectedUriText.isBlank()) "Selecionar áudio…" else "Trocar áudio…")
+                }
+                if (selectedUriText.isNotBlank()) {
+                    Text(
+                        Uri.parse(selectedUriText).lastPathSegment ?: "Arquivo selecionado",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                if (inspecting) {
+                    Text("Analisando formato e qualidade…", style = MaterialTheme.typography.bodySmall)
+                }
+                inspectionError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+                inspection?.let { QualityCard(it) }
+            }
+        }
+
+        OutlinedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Fonte online", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Pesquisa e download serão conectados em um bloco próprio; o arquivo local já permite validar o fluxo Android sem depender dessa etapa.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        Button(
+            onClick = onContinue,
+            enabled = selectedUriText.isNotBlank() && !inspecting,
+        ) {
+            Text("Continuar para Separação")
+        }
+    }
+}
+
+@Composable
 private fun PlaceholderScreen(title: String, text: String) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -188,11 +306,15 @@ private fun PlaceholderScreen(title: String, text: String) {
 }
 
 @Composable
-private fun SeparationScreen() {
+private fun SeparationScreen(
+    initialUriText: String,
+    onUriChanged: (String) -> Unit,
+) {
     val context = LocalContext.current
     val jobStore = remember(context) { JobStore(context) }
     var mode by rememberSaveable { mutableStateOf(SeparationMode.androidDefault.name) }
-    var uriText by rememberSaveable { mutableStateOf("") }
+    var uriText by rememberSaveable(initialUriText) { mutableStateOf(initialUriText) }
+    var technicalOpen by rememberSaveable { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var jobState by remember { mutableStateOf(jobStore.load()) }
     var modelCandidatePresent by remember {
@@ -209,6 +331,7 @@ private fun SeparationScreen() {
             } catch (_: Exception) {
             }
             uriText = uri.toString()
+            onUriChanged(uriText)
             resultMessage = null
         }
     }
@@ -260,8 +383,8 @@ private fun SeparationScreen() {
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Rápida continua sendo o padrão Android. Alta qualidade usa o " +
-                "BS-RoFormer-SW real quando o PTE autoritativo está instalado."
+            "Escolha entre o modo rápido para uso diário e a Alta qualidade para máxima separação. O arquivo selecionado em Fonte é reaproveitado automaticamente.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         SeparationMode.entries.forEach { item ->
@@ -283,11 +406,11 @@ private fun SeparationScreen() {
                         Text(
                             when (item) {
                                 SeparationMode.QUICK ->
-                                    "Demucs htdemucs_6s • 6 stems • uso diário recomendado"
+                                    "Mais eficiente • 6 stems • recomendado para uso diário"
                                 SeparationMode.HIGH_QUALITY ->
-                                    "BS-RoFormer-SW • ExecuTorch 1.3.1/XNNPACK • 6 stems"
+                                    "Maior fidelidade • processamento mais pesado • 6 stems"
                                 SeparationMode.COMPARE ->
-                                    "Os dois motores • após o gate arm64 da Alta qualidade"
+                                    "Executa os dois motores para comparação"
                             }
                         )
                     }
@@ -328,18 +451,10 @@ private fun SeparationScreen() {
 
                 if (selectedMode == SeparationMode.HIGH_QUALITY) {
                     Text(
-                        "PTE: ${BsRoformerContract.PTE_FILE_NAME} • 700.284.960 bytes • " +
-                            "SHA-256 " + BsRoformerContract.PTE_SHA256.take(12) + "…",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
                         if (modelCandidatePresent) {
-                            "Arquivo com o tamanho esperado presente. O SHA-256 completo " +
-                                "será revalidado antes da inferência."
+                            "Modelo de Alta qualidade presente. A integridade completa será revalidada antes de processar."
                         } else {
-                            "O checkpoint upstream declara licença desconhecida; este " +
-                                "build não republica nem baixa automaticamente o PTE. " +
-                                "Importe o artifact exato produzido pela CI."
+                            "O modelo de Alta qualidade ainda precisa ser importado neste dispositivo."
                         },
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -349,10 +464,29 @@ private fun SeparationScreen() {
                     ) {
                         Text(
                             if (modelCandidatePresent) {
-                                "Reimportar PTE BS-RoFormer…"
+                                "Reimportar modelo de Alta qualidade…"
                             } else {
-                                "Importar PTE BS-RoFormer…"
+                                "Importar modelo de Alta qualidade…"
                             }
+                        )
+                    }
+                    TextButton(onClick = { technicalOpen = !technicalOpen }) {
+                        Text(if (technicalOpen) "▾ Ocultar detalhes técnicos" else "▸ Detalhes técnicos")
+                    }
+                    if (technicalOpen) {
+                        Text(
+                            "BS-RoFormer-SW • ExecuTorch ${BsRoformerContract.EXECUTORCH_VERSION} / ${BsRoformerContract.PTE_BACKEND}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "PTE: ${BsRoformerContract.PTE_FILE_NAME} • ${BsRoformerContract.PTE_BYTES} bytes • SHA-256 " +
+                                BsRoformerContract.PTE_SHA256.take(12) + "…",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Os pesos upstream ainda não têm licença de redistribuição estabelecida; este build não republica nem baixa automaticamente o PTE.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -422,10 +556,9 @@ private fun SeparationScreen() {
                         Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text("Comparar ainda bloqueado", fontWeight = FontWeight.SemiBold)
+                        Text("Comparar ainda indisponível", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Primeiro será provado o PTE em Android arm64 real e medido " +
-                                "PSS/tempo/thermal. Depois Comparar reutilizará preparação/I/O."
+                            "Será habilitado depois da homologação física da Alta qualidade neste hardware Android."
                         )
                     }
                 }

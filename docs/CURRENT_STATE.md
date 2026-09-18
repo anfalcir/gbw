@@ -27,6 +27,8 @@ Linha atual: **6.0.0-alpha1**.
 ### Domínio/UI já portados
 
 - projeto nativo Kotlin + Jetpack Compose;
+- shell escuro/imersivo para Android, com safe drawing insets e conteúdo centralizado em telas largas;
+- Fonte local via SAF conectada diretamente à seleção usada pela tela de Separação;
 - regras de afinação, delta global, bloqueios de conversão e normalização da v5.23;
 - **Rápida / Demucs** como separação padrão Android;
 - Alta qualidade / BS-RoFormer preservada como opção futura;
