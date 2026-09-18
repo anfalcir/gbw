@@ -4,7 +4,7 @@ Reimplementação Android nativa do Guitar Backing Wizard, tendo **GBW Linux 5.2
 
 ## Estado
 
-Versão de desenvolvimento: `6.0.0-alpha1`.
+Versão de desenvolvimento: `6.0.0-alpha2`.
 
 O Android já possui três fluxos DSP/ML centrais implementados digitalmente:
 

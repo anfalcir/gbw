@@ -22,7 +22,7 @@
 
 ## Android
 
-Linha atual: **6.0.0-alpha1**.
+Linha atual: **6.0.0-alpha2**.
 
 ### Domínio/UI já portados
 
