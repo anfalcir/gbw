@@ -8,7 +8,9 @@ required = [
     b"engine=direct-segment-v1",
     b"window_frames=343980",
     b"parallel=openblas",
-    b"openblas@e0166008be8e466242aa76b2ff75ce3f0fbf574a",
+    b"openblas@",
+    b"e0166008be8e466242aa76b2ff75ce3f0fbf574a",
+    b"openblas_set_num_threads",
     b"blas_threads=",
 ]
 with zipfile.ZipFile(apk) as archive:
