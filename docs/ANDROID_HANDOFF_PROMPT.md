@@ -1,92 +1,42 @@
 # Handoff — GBW Android
 
-Repositório: `anfalcir/gbw`  
-Branch: `dev/android-6.0`
+Repository: anfalcir/gbw
+Branch: dev/android-6.0
+Baseline Linux: linux/ = GBW Linux 5.23.0, read-only.
 
 ## Regras
+- confirmar HEAD remoto antes de escrever;
+- não modificar linux/;
+- não modificar anfalcir/guitarlab quando usado como referência;
+- preservar Demucs-only htdemucs_6s, OpenBLAS default 1 thread, FFmpeg e Rubber Band R3;
+- não reintroduzir BS-RoFormer/PTE/ExecuTorch/PFFFT.
 
-- confirmar HEAD antes de escrever;
-- não modificar `linux/`;
-- Separação Android = Demucs `htdemucs_6s`;
-- uma variável de performance por experimento;
-- não trocar chunking antes de medir cada hipótese isoladamente.
+## Arquitetura alpha11
+- project/: UUID/schema/repository/managed source/migração/snapshot;
+- export/: backing+guitar/shared gain/export manifest;
+- backup/: SAF store, revision identity, coordinator, WorkManager e reconciliation;
+- source/: pesquisa/ranking e aquisição yt-dlp endurecida contra HTTP 403.
 
-## Checkpoint atual
+## Invariantes
+- rename mantém projectId;
+- duplicate cria projectId novo;
+- SAF local é copiado para source/ gerenciado;
+- jobs e staging não entram no backup;
+- backup inclui fonte + stems + exports;
+- backup não mantém histórico de revisões;
+- commit remoto só é válido após size/SHA-256 + manifest + commit marker;
+- conflito local/Drive nunca sobrescreve silenciosamente;
+- backing contém exatamente cinco stems sem guitar;
+- shared gain é idêntico para backing e guitar;
+- pitch preserva duração/alinhamento.
 
-`6.0.0-alpha10.1`, versionCode 14.
+## Download YouTube
+O vídeo de homologação confirmou ranking correto e falha de aquisição com: HTTP Error 403: Forbidden.
+O alpha11 trata isso com formato re-inspecionado na aquisição, atualização NIGHTLY suportada pelo youtubedl-android, retries limitados e clientes isolados: tentativa fresca, android_vr, depois web_embedded. O cancelamento destrói todos os processIds de retry.
 
-- commit funcional: `0636575a85f163e6b79a0f6400993484d03b6d36`
-- CI #94 / run `35392234622`: **SUCCESS**
-- APK: 55,617,794 bytes
-- SHA-256: `cd865e34d35e61a5a27706f01a6c771dccb65dedfe8172369c2c54112cdd699a`
-- assinatura de homologação: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
-
-## Performance física homologada
-
-### 1 thread — promovido
-- 1895 s
-- 1712 MiB PSS
-- 39 chunks
-- mediana 48,2 s
-- máximo 51,0 s
-- térmico normal
-- SUCCESS 100%
-
-### 2 threads — referência anterior
-- 1977 s
-- 1714 MiB
-- mediana 45,9 s
-- máximo 87,3 s
-- térmico leve
-- áudio previamente aprovado
-
-### 4 threads — rejeitado
-- 2460 s
-- 1698 MiB
-- mediana 58,8 s
-- máximo 102,8 s
-- térmico leve
-
-Decisão:
-- default = 1 thread;
-- política suportada = 1/2;
-- JNI também rejeita 4;
-- chunk concurrency = 1.
-
-Falta apenas confirmação auditiva explícita do resultado 1t/alpha10 para fechar o gate físico de áudio dessa configuração.
-
-## UX já consolidada
-
-- nome amigável do arquivo SAF;
-- identificadores opacos não são expostos;
-- mensagem “Separação iniciada em segundo plano.” expira;
-- Sistema mostra threads reais;
-- timeout do FGS envia cancelamento ao Demucs corretamente.
-
-## Pesquisa Online
-
-Implementada e validada digitalmente:
-- regras de matching/ranking do Linux 5.23 portadas;
-- Bandcamp discovery provider;
-- Apple Music/iTunes Search API provider;
-- busca ampla YouTube/SoundCloud/Bandcamp;
-- estado da pesquisa persistente em ViewModel + SavedStateHandle;
-- Robusta/Máxima;
-- recomendado/score/motivo;
-- URL manual;
-- isolamento de falha entre providers.
-
-Detalhes: `docs/ANDROID_ONLINE_SOURCES.md`.
-
-## Próxima ação
-
-Homologar fisicamente o alpha10.1:
-- atualização por cima;
-- Pesquisa `Wolves At The Gate / Enemy`;
-- rotação retrato↔paisagem sem perder os campos/resultados;
-- URL manual;
-- nome amigável SAF;
-- BLAS 1 na tela Sistema;
-- spot-check dos seis stems.
-
-Depois, continuar M7 e conectar os stems internos à etapa Afinação/Pitch sem regressar o renderer Rubber Band.
+## Gates físicos restantes
+1. retestar o download do candidato YouTube em rede real;
+2. selecionar uma pasta Google Drive via SAF e confirmar permissão/visibilidade;
+3. rename sem duplicação remota e coalescência de pequenas mudanças;
+4. reinstalação + seleção da mesma pasta + descoberta/import;
+5. audição final do par backing/guitar.

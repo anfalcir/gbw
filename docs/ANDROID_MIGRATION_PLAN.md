@@ -1,83 +1,33 @@
 # GBW Android — Plano Mestre de Migração
 
-Baseline congelado: GBW Linux 5.23.0  
-Branch Android: `dev/android-6.0`
+Baseline congelado: GBW Linux 5.23.0
+Branch Android: dev/android-6.0
 
 ## Princípios
-
-1. Não modificar `linux/`.
+1. Nunca modificar linux/ durante o trabalho Android.
 2. Android nativo Kotlin/Compose + NDK/JNI.
 3. Processamento pesado fora da Activity.
-4. Qualidade/estabilidade antes de velocidade.
-5. Uma variável por benchmark.
-6. Separação Android somente com Demucs `htdemucs_6s`.
-7. Modelos grandes fora do APK e validados.
-8. Interoperabilidade no escopo comum.
+4. Separação Android exclusivamente Demucs htdemucs_6s.
+5. Artefatos duráveis entram no project root somente após validação.
+6. projectId UUID é identidade canônica e imutável.
+7. Interoperabilidade com GuitarLab é por arquivos/metadados, não por dependência de código.
 
 ## Roadmap
+M0–M6: shell, domínio, SAF/inspeção, background, Rubber Band R3, Demucs-only e otimização 1-thread — concluídos.
 
-### M0 — Baseline e CI
-Concluído.
+M7 — Workflow completo: IMPLEMENTADO no alpha11.
+Fonte gerenciada → Separação → Afinação/Pitch → Exportação.
 
-### M1 — Shell/domínio/navegação
-Concluído.
+M8 — Exportação final/shared gain: IMPLEMENTADO no alpha11.
+Par backing+guitar, target -1 dBFS na recombinação, um único ganho compartilhado, WAV float32/WAV24/FLAC24.
 
-### M2 — Fonte/SAF/inspeção
-Implementação local concluída.
+M9 — Projetos/backup/restore: IMPLEMENTADO no alpha11.
+UUID, project.json versionado, managed source, migração alpha, SAF backup, revisionId forte, incremental reuse, no-history retention, WorkManager coalescido, scan/reconcile/conflict.
 
-Pesquisa online implementada:
-- ranking Linux 5.23 portado;
-- UI Artista/Música;
-- Robusta/Máxima;
-- Bandcamp discovery;
-- URL manual;
-- isolamento de falha;
-- aquisição automática de mídia permanece separada.
+M10 — Hardening: DIGITAL PASS depende da CI do candidato final; gates físicos ficam restritos a DocumentsProvider real, rede/YouTube e audição.
 
-Gate restante: homologação física da pesquisa no alpha10.
+M11 — Release engineering: homologação alpha11, depois RC/produção.
+M12 — 6.0.0 final: homologação final e release.
 
-### M3 — Background/lifecycle
-Implementado; regressão física contínua.
-
-### M4 — Pitch de Arquivo
-Implementado com Rubber Band R3; homologação auditiva final antes do RC.
-
-### M5 — Separação Demucs
-Concluído.
-
-### M6 — Performance/UX
-**Performance de threads concluída.**
-
-Resultados:
-- alpha8: 2165 s / 2180 MiB;
-- 2t: 1977 s / 1714 MiB;
-- 4t: 2460 s / 1698 MiB — rejeitado;
-- **1t: 1895 s / 1712 MiB — promovido**.
-
-Alpha10 consolida 1t default e política 1/2.
-
-Restante M6:
-- spot-check auditivo explícito no alpha10;
-- homologar UX nova;
-- só então considerar uma nova classe de otimização como redução adicional de cópias JNI/native output, isoladamente.
-
-### M7 — Workflow completo
-Próxima macroetapa:
-Fonte → Separação → Afinação/Pitch → Exportação.
-
-A primeira implementação deve conectar stems privados ao renderer de Pitch preservando o contrato Rubber Band e sem depender de SAF para arquivos internos.
-
-### M8 — Exportação final/shared gain
-Pendente.
-
-### M9 — Projetos/backup/restore
-Pendente.
-
-### M10 — Hardening
-Stress, lifecycle, armazenamento, cancelamento, arquivos inválidos e long runs.
-
-### M11 — Release engineering
-Licenças, chave privada de produção, release build e RC.
-
-### M12 — 6.0.0 final
-Homologação final e release.
+## Aquisição online
+O ranking continua desacoplado da aquisição. Após a homologação física encontrar candidatos corretamente mas registrar HTTP 403 no download YouTube, o alpha11 adiciona atualização do yt-dlp no runtime, re-inspeção no momento da aquisição e fallbacks isolados de player_client para evitar reutilizar uma rota/URL de mídia inválida.
