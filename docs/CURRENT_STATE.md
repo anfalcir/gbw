@@ -22,7 +22,7 @@
 
 ## Android
 
-Linha atual: **6.0.0-alpha6**.
+Linha atual: **6.0.0-alpha7**.
 
 ### Domínio/UI já portados
 
@@ -145,6 +145,9 @@ O manager implementa `.part`, Content-Length quando disponível, limite de bytes
 - Android 11+ reconcilia mortes do worker via `ApplicationExitInfo`, incluindo crash nativo, sinal, memória, PSS/RSS e fase registrada;
 - homologação física do alpha5: UI sobreviveu, self-test chegou a `SUCCESS 100%`, e a Separação Rápida isolou `crash Java/Kotlin` em `demucs:audio-prep`;
 - alpha6 remove SAF direto do FFmpeg no worker: os pipelines fazem `content:// → cópia privada local → FFmpeg/FFprobe local`, com streaming, `fsync`, cleanup e execução síncrona controlada;
+- homologação física do alpha6 com o mesmo M4A: a UI permaneceu viva e o job terminou de forma controlada em `demucs:audio-ffmpeg` com `NoClassDefFoundError`, antes de `demucs:model-load`;
+- inspeção do APK exato da CI #73 confirmou que `FFmpegKitConfig` referenciava `com.arthenica.smartexception.java.Exceptions`, mas essa classe não estava definida em nenhum DEX do APK;
+- alpha7 fixa explicitamente `smart-exception-java:0.2.1` + `smart-exception-common:0.2.1`, preserva a causa encadeada de erros de runtime e adiciona gate que lê as tabelas `class_defs` dos DEX do APK;
 - Demucs e BS-RoFormer marcam `audio-stage`, `audio-ffmpeg` e `audio-validate` separadamente para diagnóstico físico;
 - `ForegroundService` é proprietário das tarefas pesadas;
 - Activity não é proprietária do job;
@@ -179,16 +182,21 @@ Gates atuais:
 4. testes unitários Android, incluindo contratos de chunking/modelo;
 5. Android Lint;
 6. `assembleDebug` NDK/CMake arm64;
-7. verificação de `libgbw_rubberband.so` e `libgbw_demucs.so` dentro do APK;
-8. metadata/SHA-256 do APK incluindo pins do runtime e modelo;
-9. upload do APK debug e relatórios.
+7. verificação de `libgbw_rubberband.so`, `libgbw_demucs.so` e `libgbw_bsroformer_spectral.so` dentro do APK;
+8. verificação de classes Java críticas do FFmpegKit no DEX final (`FFmpegKitConfig` + `smart-exception Exceptions`);
+9. verificação do Manifest mesclado: worker `:media` + `foregroundServiceType=dataSync`;
+10. metadata/SHA-256 do APK incluindo pins do runtime e modelo;
+11. upload do APK debug e relatórios.
 
-Checkpoint funcional anterior de UI + Demucs:
+Checkpoint Android atual para homologação física:
 
-- commit: `724a3604cf42e7a610ee8c3e19076075444ca508`;
-- Android CI run `#39`: **SUCCESS**.
-
-O gate adicional de checkpoint externo foi acrescentado em `f4089aa5c338154f07cdda15d432f4bbe30dd837`; consulte a CI do próprio SHA como evidência autoritativa.
+- versão: `6.0.0-alpha7`;
+- commit funcional: `382b0553ae99866430b226a291869181044c935c`;
+- Android CI run `#75` / run ID `35348230980`: **SUCCESS**;
+- APK: `65,022,189` bytes;
+- SHA-256: `18d105a08d54e936cacf4f75467666705aa61854c7d407c08449f040d4d4a884`;
+- gate de runtime FFmpegKit/Smart Exception: **PASS**;
+- gate do Manifest mesclado do worker: **PASS**.
 
 ## Licenças / distribuição
 
@@ -222,14 +230,15 @@ Também permanecem como gates de desenvolvimento:
 
 ## Próximo gate
 
-1. executar a Separação Rápida no alpha6 com o mesmo M4A e confirmar avanço por `audio-stage` → `audio-ffmpeg` → `audio-validate`;
-2. se houver nova falha, registrar a fase exata exibida; se a preparação passar, observar `demucs:model-load` e a primeira inferência;
-3. validar Home/outro app/tela bloqueada com o serviço ativo;
-4. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
-5. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;
-6. resolver a licença de redistribuição do checkpoint/PTE antes de habilitar URL pública;
-7. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
-8. depois seguir Fonte/download e o workflow completo.
+1. executar a Separação Rápida no alpha7 com o mesmo M4A e confirmar que o antigo `NoClassDefFoundError` não reaparece;
+2. confirmar avanço por `demucs:audio-stage` → `demucs:audio-ffmpeg` → `demucs:audio-validate` → `demucs:model-load` e, se possível, até a primeira `demucs:infer:X/Y`;
+3. se houver nova falha, registrar a fase e a mensagem completas exibidas; o alpha7 agora preserva o tipo/mensagem da causa encadeada;
+4. validar Home/outro app/tela bloqueada com o serviço ativo;
+5. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
+6. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;
+7. resolver a licença de redistribuição do checkpoint/PTE antes de habilitar URL pública;
+8. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
+9. depois seguir Fonte/download e o workflow completo.
 
 ## Continuidade
 

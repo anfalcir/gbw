@@ -4,7 +4,7 @@ Reimplementação Android nativa do Guitar Backing Wizard, tendo **GBW Linux 5.2
 
 ## Estado
 
-Versão de desenvolvimento: `6.0.0-alpha6`.
+Versão de desenvolvimento: `6.0.0-alpha7`.
 
 O Android já possui três fluxos DSP/ML centrais implementados digitalmente:
 
@@ -26,7 +26,7 @@ A linha continua alpha porque a Alta qualidade ainda precisa do gate runtime arm
 - CMake `3.22.1`.
 - Storage Access Framework para arquivos do usuário.
 - Foreground Service `dataSync` em processo dedicado `:media` para tarefas longas.
-- FFmpegKit como camada de inspeção/codec/conversão.
+- FFmpegKit como camada de inspeção/codec/conversão, com `smart-exception-java/common 0.2.1` explicitamente empacotados e verificados no DEX.
 - Rubber Band Library `4.0.0` @ `1d95888bec3ae0a17c0c4af791810d5a63f6bc35`.
 - `demucs.cpp` @ `f1206e9adeea103aef4a636b9e62297cf1f8e34e`.
 - Eigen @ `dd8c71e62852b2fe429edb6682ac91fd1c578a26`.
@@ -124,9 +124,11 @@ Todo commit/push dispara automaticamente **Android CI**. O workflow executa:
 4. testes unitários Android;
 5. Android Lint;
 6. `assembleDebug` com NDK/CMake;
-7. verificação de `libgbw_rubberband.so` e `libgbw_demucs.so` no APK arm64;
-8. SHA-256/metadata do APK e pins de DSP/ML;
-9. publicação do APK debug e relatórios como artifacts.
+7. verificação das bibliotecas nativas Rubber Band, Demucs e BS-RoFormer no APK arm64;
+8. verificação das classes Java críticas do FFmpegKit/Smart Exception no DEX final;
+9. verificação do Manifest mesclado do worker `:media`/`dataSync`;
+10. SHA-256/metadata do APK e pins de DSP/ML;
+11. publicação do APK debug e relatórios como artifacts.
 
 ## Limite da homologação digital
 
