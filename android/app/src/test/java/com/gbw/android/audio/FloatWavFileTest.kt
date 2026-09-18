@@ -71,6 +71,24 @@ class FloatWavFileTest {
         }
     }
 
+    @Test
+    fun `writer slice avoids caller-side core copies and preserves exact samples`() {
+        val file = File.createTempFile("gbw-f32-slice-", ".wav")
+        try {
+            val source = FloatArray(512) { index -> (index - 256) / 512f }
+            FloatWavWriter(file, 44_100, 2).use { writer ->
+                writer.write(source, 100, 240)
+                assertEquals(120L, writer.framesWritten)
+            }
+            FloatWavReader(file).use { reader ->
+                assertEquals(120L, reader.info.frames)
+                assertArrayEquals(source.copyOfRange(100, 340), reader.readBlock(120), 0f)
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `reader rejects non wav input`() {
         val file = File.createTempFile("gbw-bad-", ".wav")

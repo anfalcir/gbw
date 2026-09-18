@@ -12,8 +12,8 @@ android {
         applicationId = "com.gbw.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 8
-        versionName = "6.0.0-alpha8"
+        versionCode = 9
+        versionName = "6.0.0-alpha9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -52,9 +52,6 @@ android {
 
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
-        // FFmpegKit and ExecuTorch/fbjni both bundle the shared Android C++
-        // runtime. Package exactly one copy instead of failing mergeNativeLibs.
-        jniLibs.pickFirsts += setOf("lib/**/libc++_shared.so")
     }
 }
 
@@ -79,9 +76,6 @@ dependencies {
     // in the final DEX, so keep both runtime jars explicit and verify them in CI.
     implementation("com.arthenica:smart-exception-java:0.2.1")
     implementation("com.arthenica:smart-exception-common:0.2.1")
-
-    // Exact runtime used by the pinned BS-RoFormer export toolchain.
-    implementation("org.pytorch:executorch-android:1.3.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

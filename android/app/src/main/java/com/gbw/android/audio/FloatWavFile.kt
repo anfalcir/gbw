@@ -132,6 +132,7 @@ class FloatWavWriter(
     private val output = RandomAccessFile(file, "rw")
     var framesWritten: Long = 0L
         private set
+    private val writeScratch = ByteBuffer.allocate(64 * 1024).order(ByteOrder.LITTLE_ENDIAN)
 
     init {
         require(sampleRate in 8_000..192_000)
@@ -141,14 +142,26 @@ class FloatWavWriter(
         output.seek(44L)
     }
 
-    fun write(interleaved: FloatArray) {
-        require(interleaved.size % channels == 0) { "Bloco de saída não é divisível pelos canais" }
-        if (interleaved.isEmpty()) return
-        val bytes = ByteBuffer.allocate(Math.multiplyExact(interleaved.size, 4))
-            .order(ByteOrder.LITTLE_ENDIAN)
-        interleaved.forEach(bytes::putFloat)
-        output.write(bytes.array())
-        framesWritten += interleaved.size / channels
+    fun write(interleaved: FloatArray) = write(interleaved, 0, interleaved.size)
+
+    /** Writes a slice without allocating a second FloatArray or a block-sized byte buffer. */
+    fun write(interleaved: FloatArray, offset: Int, sampleCount: Int) {
+        require(offset >= 0 && sampleCount >= 0 && offset <= interleaved.size - sampleCount) {
+            "Fatia float32 fora dos limites"
+        }
+        require(sampleCount % channels == 0) { "Bloco de saída não é divisível pelos canais" }
+        if (sampleCount == 0) return
+        var cursor = offset
+        val end = offset + sampleCount
+        val scratchSamples = writeScratch.capacity() / 4
+        while (cursor < end) {
+            val count = minOf(scratchSamples, end - cursor)
+            writeScratch.clear()
+            repeat(count) { index -> writeScratch.putFloat(interleaved[cursor + index]) }
+            output.write(writeScratch.array(), 0, count * 4)
+            cursor += count
+        }
+        framesWritten += sampleCount / channels
     }
 
     /**

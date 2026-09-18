@@ -7,7 +7,7 @@ import org.junit.Test
 
 class DemucsContractTest {
     @Test
-    fun `quick model identity is immutable and six source`() {
+    fun `demucs model identity is immutable and six source`() {
         val spec = DemucsModelContract.quick
         assertEquals("htdemucs_6s", spec.id)
         assertEquals("ggml-model-htdemucs-6s-f16.bin", spec.fileName)
@@ -23,6 +23,9 @@ class DemucsContractTest {
         assertEquals(6, DemucsModelContract.stemNames.distinct().size)
         assertFalse(DemucsModelContract.RUNTIME_COMMIT.isBlank())
         assertEquals(DemucsChunking.WINDOW_FRAMES, DemucsNative.MODEL_WINDOW_FRAMES)
+        assertEquals(setOf(1, 2, 4), DemucsThreadPolicy.supportedThreadCounts)
+        assertEquals(2, DemucsThreadPolicy.DEFAULT_THREADS)
+        assertEquals(4_000L, DemucsRuntimeMonitor.SAMPLE_INTERVAL_MS)
     }
 
     @Test

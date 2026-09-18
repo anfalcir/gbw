@@ -4,6 +4,7 @@ import com.gbw.android.audio.FloatWavWriter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -13,18 +14,21 @@ class SeparationResultFilesTest {
     val temp = TemporaryFolder()
 
     @Test
-    fun quickAndHighQualityDirectoriesAreDeterministic() {
+    fun demucsDirectoryIsDeterministicAndAlpha8LegacyPathRemainsReadable() {
         val root = temp.root
+        assertEquals(
+            "jobs/job-123/separation/demucs",
+            SeparationResultFiles.outputDirectory(
+                root, "job-123", SeparationResultFiles.DEMUCS_TYPE
+            )?.relativeTo(root)?.path?.replace('\\', '/'),
+        )
         assertEquals(
             "jobs/job-123/separation/quick",
             SeparationResultFiles.outputDirectory(root, "job-123", "separation-quick")
                 ?.relativeTo(root)?.path?.replace('\\', '/'),
         )
-        assertEquals(
-            "jobs/job-123/separation/high-quality",
-            SeparationResultFiles.outputDirectory(root, "job-123", "separation-high-quality")
-                ?.relativeTo(root)?.path?.replace('\\', '/'),
-        )
+        assertTrue(SeparationResultFiles.isDemucsType(SeparationResultFiles.DEMUCS_TYPE))
+        assertTrue(SeparationResultFiles.isDemucsType("separation-quick"))
         assertNull(SeparationResultFiles.outputDirectory(root, "job-123", "other"))
     }
 
@@ -33,12 +37,13 @@ class SeparationResultFilesTest {
         val root = temp.newFolder("files")
         val record = StoredSeparationResult(
             jobId = "job-six",
-            type = "separation-quick",
+            type = SeparationResultFiles.DEMUCS_TYPE,
             completedAt = 1L,
             frames = 128L,
             elapsedMillis = 10L,
             peakPssKb = 20L,
             runtimeIdentity = "test",
+            blasThreads = 2,
         )
         val directory = requireNotNull(
             SeparationResultFiles.outputDirectory(root, record.jobId, record.type)
@@ -52,6 +57,7 @@ class SeparationResultFilesTest {
         val validated = SeparationResultFiles.validate(root, record)
         assertNotNull(validated)
         assertEquals(6, validated?.stems?.size)
+        assertEquals(2, validated?.record?.blasThreads)
         directory.resolve("piano.wav").delete()
         assertNull(SeparationResultFiles.validate(root, record))
     }

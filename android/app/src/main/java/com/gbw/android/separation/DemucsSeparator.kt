@@ -26,6 +26,7 @@ internal data class DemucsSeparationResult(
     val medianChunkMillis: Long,
     val maxChunkMillis: Long,
     val maxThermalStatus: Int,
+    val blasThreads: Int,
 )
 
 internal object DemucsSeparator {
@@ -54,7 +55,7 @@ internal object DemucsSeparator {
 
         val tempDir = File(context.cacheDir, "gbw-demucs/$jobId")
         val preparedInput = File(tempDir, "input_44100_stereo_f32.wav")
-        val outputDir = File(context.filesDir, "jobs/$jobId/separation/quick")
+        val outputDir = File(context.filesDir, "jobs/$jobId/separation/demucs")
         tempDir.deleteRecursively()
         outputDir.deleteRecursively()
         tempDir.mkdirs()
@@ -85,11 +86,15 @@ internal object DemucsSeparator {
             report(14, "Carregando modelo htdemucs_6s…")
             WorkerExitDiagnostics.markPhase(context, "demucs:model-load")
 
+            val blasThreads = DemucsThreadPolicy.resolve()
+            check(DemucsNative.configureBlasThreads(blasThreads) == blasThreads) {
+                "OpenBLAS thread configuration was not applied"
+            }
             modelHandle = DemucsNative.createModel(modelFile.absolutePath)
             WorkerExitDiagnostics.markPhase(context, "demucs:model-loaded")
             peakPssKb = maxOf(peakPssKb, Debug.getPss())
             val runtimeIdentity = DemucsNative.identity()
-            report(15, "Modelo carregado. Iniciando separação em seis stems…")
+            report(15, "Modelo carregado. Iniciando separação em seis stems • BLAS $blasThreads threads…")
 
             val plans = DemucsChunking.plan(inputInfo.frames)
             val stemFiles = DemucsModelContract.stemNames.associateWith { stem -> File(outputDir, "$stem.wav") }
@@ -125,6 +130,7 @@ internal object DemucsSeparator {
                         context,
                         "demucs:infer:${plan.index + 1}/${plans.size}",
                     )
+                    runtimeMonitor.sampleNow()
                     val chunkStartedAt = System.nanoTime()
                     val nativeOutput = DemucsNative.separateChunk(
                         handle = modelHandle,
@@ -145,10 +151,8 @@ internal object DemucsSeparator {
                     val cropSamples = plan.cropStartFrame * DemucsNative.REQUIRED_CHANNELS
                     val coreSamples = plan.coreFrames * DemucsNative.REQUIRED_CHANNELS
                     for (source in 0 until DemucsNative.SOURCE_COUNT) {
-                        val core = FloatArray(coreSamples)
                         val sourceOffset = source * samplesPerSourceWindow + cropSamples
-                        System.arraycopy(nativeOutput, sourceOffset, core, 0, coreSamples)
-                        openWriters[source].write(core)
+                        openWriters[source].write(nativeOutput, sourceOffset, coreSamples)
                     }
                     peakPssKb = maxOf(peakPssKb, Debug.getPss())
                     val complete = 15 + (((plan.index + 1).toDouble() / plans.size.toDouble()) * 80.0).roundToInt()
@@ -184,7 +188,7 @@ internal object DemucsSeparator {
                 if (orderedChunkMillis.isEmpty()) 0L
                 else orderedChunkMillis[orderedChunkMillis.size / 2]
             val maxChunkMillis = chunkMillis.maxOrNull() ?: 0L
-            report(100, "Separação Rápida concluída: 6 stems validados.")
+            report(100, "Separação concluída: 6 stems validados.")
             WorkerExitDiagnostics.markPhase(context, "demucs:complete")
             success = true
             DemucsSeparationResult(
@@ -199,6 +203,7 @@ internal object DemucsSeparator {
                 medianChunkMillis = medianChunkMillis,
                 maxChunkMillis = maxChunkMillis,
                 maxThermalStatus = runtimeMetrics.maxThermalStatus,
+                blasThreads = blasThreads,
             )
         } finally {
             runtimeMonitor.stop()

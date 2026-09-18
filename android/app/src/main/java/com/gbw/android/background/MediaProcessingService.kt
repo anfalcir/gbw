@@ -21,11 +21,10 @@ import com.gbw.android.audio.FilePitchRenderRequest
 import com.gbw.android.audio.FilePitchRenderer
 import com.gbw.android.domain.AudioKind
 import com.gbw.android.domain.OutputFormat
-import com.gbw.android.separation.BsRoformerModelManager
-import com.gbw.android.separation.BsRoformerSeparator
 import com.gbw.android.separation.DemucsNative
 import com.gbw.android.separation.DemucsSeparator
 import com.gbw.android.separation.DemucsRuntimeMonitor
+import com.gbw.android.separation.SeparationResultFiles
 import com.gbw.android.separation.SeparationResultStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -63,17 +62,11 @@ class MediaProcessingService : Service() {
                 ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
                 ACTION_SELF_TEST -> startSelfTest()
                 ACTION_FILE_PITCH -> startFilePitch(requireNotNull(intent), flags)
-                ACTION_DEMUCS_QUICK -> startDemucsQuick(requireNotNull(intent), flags)
-                ACTION_BSROFORMER_HIGH_QUALITY ->
-                    startBsRoformerHighQuality(requireNotNull(intent), flags)
-                ACTION_BSROFORMER_IMPORT ->
-                    startBsRoformerImport(requireNotNull(intent), flags)
+                ACTION_DEMUCS -> startDemucs(requireNotNull(intent), flags)
             }
             if (
                 action == ACTION_FILE_PITCH ||
-                action == ACTION_DEMUCS_QUICK ||
-                action == ACTION_BSROFORMER_HIGH_QUALITY ||
-                action == ACTION_BSROFORMER_IMPORT
+                action == ACTION_DEMUCS
             ) {
                 START_REDELIVER_INTENT
             } else {
@@ -168,18 +161,18 @@ class MediaProcessingService : Service() {
         }
     }
 
-    private fun startDemucsQuick(intent: Intent, startFlags: Int) {
+    private fun startDemucs(intent: Intent, startFlags: Int) {
         if (activeJob?.isActive == true) return
         val input = intent.getStringExtra(EXTRA_INPUT_URI)?.let(Uri::parse)
         if (input == null) {
-            saveInvalid("separation-quick", "Separação Rápida", "Arquivo de entrada inválido para Demucs.")
+            saveInvalid(SeparationResultFiles.DEMUCS_TYPE, "Separação", "Arquivo de entrada inválido para Demucs.")
             return
         }
 
         val persisted = PersistedJob(
             id = intent.getStringExtra(EXTRA_JOB_ID) ?: UUID.randomUUID().toString(),
-            type = "separation-quick",
-            label = "Separação Rápida",
+            type = SeparationResultFiles.DEMUCS_TYPE,
+            label = "Separação",
             state = "RUNNING",
             progress = 0,
             startedAt = System.currentTimeMillis(),
@@ -200,14 +193,14 @@ class MediaProcessingService : Service() {
                     inputUri = input,
                     jobId = persisted.id,
                 ) { progress, message -> updateJob(persisted, progress, message) }
-                separationResults.saveQuick(persisted.id, result)
+                separationResults.saveDemucs(persisted.id, result)
                 val elapsedSeconds = result.elapsedMillis / 1_000L
                 val peakMiB = result.peakObservedPssKb / 1_024L
                 val medianSeconds = result.medianChunkMillis / 1_000.0
                 val maxSeconds = result.maxChunkMillis / 1_000.0
                 val thermal = DemucsRuntimeMonitor.thermalLabel(result.maxThermalStatus)
                 val message =
-                    "Concluído • 6 stems • 44,1 kHz • ${elapsedSeconds}s • " +
+                    "Concluído • 6 stems • 44,1 kHz • BLAS ${result.blasThreads} threads • ${elapsedSeconds}s • " +
                         "PSS observado ${peakMiB} MiB • ${result.chunkCount} trechos • " +
                         "mediana ${"%.1f".format(medianSeconds)}s • máx ${"%.1f".format(maxSeconds)}s • " +
                         "térmico $thermal"
@@ -215,120 +208,7 @@ class MediaProcessingService : Service() {
             } catch (cancelled: CancellationException) {
                 finishCancelledIfRunning("Separação cancelada; stems parciais removidos.")
             } catch (error: Exception) {
-                finishError(persisted, error.message ?: "Falha inesperada na Separação Rápida.")
-            } finally {
-                finishForegroundJob()
-            }
-        }
-    }
-
-    private fun startBsRoformerHighQuality(intent: Intent, startFlags: Int) {
-        if (activeJob?.isActive == true) return
-        val input = intent.getStringExtra(EXTRA_INPUT_URI)?.let(Uri::parse)
-        if (input == null) {
-            saveInvalid(
-                "separation-high-quality",
-                "Alta qualidade",
-                "Arquivo de entrada inválido para BS-RoFormer.",
-            )
-            return
-        }
-
-        val persisted = PersistedJob(
-            id = intent.getStringExtra(EXTRA_JOB_ID) ?: UUID.randomUUID().toString(),
-            type = "separation-high-quality",
-            label = "Alta qualidade",
-            state = "RUNNING",
-            progress = 0,
-            startedAt = System.currentTimeMillis(),
-            message = if ((startFlags and START_FLAG_REDELIVERY) != 0) {
-                "Retomando BS-RoFormer-SW após reinício do processo…"
-            } else {
-                "Verificando PTE BS-RoFormer-SW…"
-            },
-        )
-        store.save(persisted)
-        startAsForeground(notification(persisted))
-        acquireWakeLock()
-
-        activeJob = scope.launch {
-            try {
-                val result = BsRoformerSeparator.separate(
-                    context = this@MediaProcessingService,
-                    inputUri = input,
-                    jobId = persisted.id,
-                ) { progress, message -> updateJob(persisted, progress, message) }
-                val elapsedSeconds = result.elapsedMillis / 1_000L
-                separationResults.saveHighQuality(persisted.id, result)
-                val peakMiB = result.peakObservedPssKb / 1_024L
-                finishSuccess(
-                    persisted,
-                    "Concluído • 6 stems • BS-RoFormer-SW/XNNPACK • " +
-                        "${elapsedSeconds}s • PSS observado ${peakMiB} MiB",
-                )
-            } catch (cancelled: CancellationException) {
-                finishCancelledIfRunning(
-                    "Alta qualidade cancelada; stems parciais removidos."
-                )
-            } catch (error: Exception) {
-                finishError(
-                    persisted,
-                    error.message ?: "Falha inesperada na Alta qualidade.",
-                )
-            } finally {
-                finishForegroundJob()
-            }
-        }
-    }
-
-    private fun startBsRoformerImport(intent: Intent, startFlags: Int) {
-        if (activeJob?.isActive == true) return
-        val input = intent.getStringExtra(EXTRA_INPUT_URI)?.let(Uri::parse)
-        if (input == null) {
-            saveInvalid(
-                "bsroformer-model-import",
-                "Modelo BS-RoFormer",
-                "PTE selecionado é inválido.",
-            )
-            return
-        }
-
-        val persisted = PersistedJob(
-            id = intent.getStringExtra(EXTRA_JOB_ID) ?: UUID.randomUUID().toString(),
-            type = "bsroformer-model-import",
-            label = "Modelo BS-RoFormer",
-            state = "RUNNING",
-            progress = 0,
-            startedAt = System.currentTimeMillis(),
-            message = if ((startFlags and START_FLAG_REDELIVERY) != 0) {
-                "Retomando importação/verificação do PTE…"
-            } else {
-                "Importando PTE autoritativo…"
-            },
-        )
-        store.save(persisted)
-        startAsForeground(notification(persisted))
-        acquireWakeLock()
-
-        activeJob = scope.launch {
-            try {
-                BsRoformerModelManager.installFromUri(
-                    context = this@MediaProcessingService,
-                    sourceUri = input,
-                ) { progress, message -> updateJob(persisted, progress, message) }
-                finishSuccess(
-                    persisted,
-                    "PTE BS-RoFormer-SW instalado e SHA-256 validado.",
-                )
-            } catch (cancelled: CancellationException) {
-                finishCancelledIfRunning(
-                    "Importação do PTE cancelada; arquivo parcial removido."
-                )
-            } catch (error: Exception) {
-                finishError(
-                    persisted,
-                    error.message ?: "Falha ao importar PTE BS-RoFormer-SW.",
-                )
+                finishError(persisted, error.message ?: "Falha inesperada na Separação.")
             } finally {
                 finishForegroundJob()
             }
@@ -431,7 +311,7 @@ class MediaProcessingService : Service() {
 
     private fun cancelCurrent(message: String) {
         val current = store.load()
-        if (current?.type == "separation-quick") DemucsNative.cancel()
+        if (current != null && SeparationResultFiles.isDemucsType(current.type)) DemucsNative.cancel()
         if (current != null && current.state == "RUNNING") {
             val cancelling = current.copy(
                 state = "CANCELLING",
@@ -443,9 +323,6 @@ class MediaProcessingService : Service() {
 
         val job = activeJob
         if (job != null) {
-            // ExecuTorch forward is not interruptible mid-call. Cancellation
-            // is cooperative at the next checked boundary; keep the FGS alive
-            // so finally can close the model and remove partial outputs.
             job.cancel(CancellationException(message))
         } else {
             releaseWakeLock()
@@ -527,7 +404,7 @@ class MediaProcessingService : Service() {
     private fun notificationManager() = getSystemService(NotificationManager::class.java)
 
     override fun onDestroy() {
-        if (::store.isInitialized && store.load()?.type == "separation-quick") DemucsNative.cancel()
+        if (::store.isInitialized && store.load()?.let { SeparationResultFiles.isDemucsType(it.type) } == true) DemucsNative.cancel()
         activeJob?.cancel()
         releaseWakeLock()
         scope.cancel()
@@ -540,11 +417,7 @@ class MediaProcessingService : Service() {
         const val ACTION_SELF_TEST = "com.gbw.android.action.BACKGROUND_SELF_TEST"
         const val ACTION_CANCEL = "com.gbw.android.action.CANCEL_MEDIA_JOB"
         const val ACTION_FILE_PITCH = "com.gbw.android.action.FILE_PITCH"
-        const val ACTION_DEMUCS_QUICK = "com.gbw.android.action.DEMUCS_QUICK"
-        const val ACTION_BSROFORMER_HIGH_QUALITY =
-            "com.gbw.android.action.BSROFORMER_HIGH_QUALITY"
-        const val ACTION_BSROFORMER_IMPORT =
-            "com.gbw.android.action.BSROFORMER_IMPORT"
+        const val ACTION_DEMUCS = "com.gbw.android.action.DEMUCS"
 
         private const val EXTRA_INPUT_URI = "input_uri"
         private const val EXTRA_OUTPUT_URI = "output_uri"
@@ -578,31 +451,14 @@ class MediaProcessingService : Service() {
             .putExtra(EXTRA_CAUTION_ACCEPTED, cautionAccepted)
             .putExtra(EXTRA_JOB_ID, jobId)
 
-        fun demucsQuickIntent(
+        fun demucsIntent(
             context: Context,
             inputUri: Uri,
             jobId: String = UUID.randomUUID().toString(),
         ): Intent = Intent(context, MediaProcessingService::class.java)
-            .setAction(ACTION_DEMUCS_QUICK)
+            .setAction(ACTION_DEMUCS)
             .putExtra(EXTRA_INPUT_URI, inputUri.toString())
             .putExtra(EXTRA_JOB_ID, jobId)
 
-        fun bsRoformerHighQualityIntent(
-            context: Context,
-            inputUri: Uri,
-            jobId: String = UUID.randomUUID().toString(),
-        ): Intent = Intent(context, MediaProcessingService::class.java)
-            .setAction(ACTION_BSROFORMER_HIGH_QUALITY)
-            .putExtra(EXTRA_INPUT_URI, inputUri.toString())
-            .putExtra(EXTRA_JOB_ID, jobId)
-
-        fun bsRoformerImportIntent(
-            context: Context,
-            modelUri: Uri,
-            jobId: String = UUID.randomUUID().toString(),
-        ): Intent = Intent(context, MediaProcessingService::class.java)
-            .setAction(ACTION_BSROFORMER_IMPORT)
-            .putExtra(EXTRA_INPUT_URI, modelUri.toString())
-            .putExtra(EXTRA_JOB_ID, jobId)
     }
 }

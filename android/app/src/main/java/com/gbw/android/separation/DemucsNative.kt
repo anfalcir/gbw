@@ -26,6 +26,13 @@ internal object DemucsNative {
 
     fun identity(): String = nativeIdentity()
 
+    fun configureBlasThreads(threadCount: Int): Int {
+        require(threadCount == 1 || threadCount == 2 || threadCount == 4) {
+            "Demucs BLAS threads must be 1, 2, or 4"
+        }
+        return nativeConfigureBlasThreads(threadCount)
+    }
+
     fun createModel(modelPath: String): Long {
         require(modelPath.isNotBlank()) { "Demucs model path is blank" }
         return nativeCreateModel(modelPath).also {
@@ -59,6 +66,7 @@ internal object DemucsNative {
     }
 
     private external fun nativeIdentity(): String
+    private external fun nativeConfigureBlasThreads(threadCount: Int): Int
     private external fun nativeCreateModel(modelPath: String): Long
     private external fun nativeDestroyModel(handle: Long)
     private external fun nativeCancel()

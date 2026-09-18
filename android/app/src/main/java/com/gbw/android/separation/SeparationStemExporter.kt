@@ -22,7 +22,6 @@ internal object SeparationStemExporter {
         val resolver = context.contentResolver
         val rootId = DocumentsContract.getTreeDocumentId(treeUri)
         val root = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId)
-        val mode = if (validated.record.type == "separation-quick") "Quick" else "HQ"
         val tag = validated.record.jobId.filter { it.isLetterOrDigit() }.take(8).ifBlank { "result" }
         val created = mutableListOf<Uri>()
         val names = mutableListOf<String>()
@@ -30,7 +29,7 @@ internal object SeparationStemExporter {
 
         try {
             validated.stems.forEachIndexed { index, stem ->
-                val name = "GBW_" + mode + "_" + tag + "_" + stem.name + ".wav"
+                val name = "GBW_Demucs_" + tag + "_" + stem.name + ".wav"
                 val target = requireNotNull(
                     DocumentsContract.createDocument(resolver, root, "audio/wav", name)
                 ) { "A pasta escolhida não permitiu criar " + name }

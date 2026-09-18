@@ -12,11 +12,6 @@ class ParityTest {
         assertNull(Tunings.delta("E Standard", "Drop D"))
     }
 
-    @Test fun androidUsesQuickSeparatorByDefault() {
-        assertEquals(SeparationMode.QUICK, SeparationMode.androidDefault)
-        assertEquals("B", SeparationMode.androidDefault.code)
-    }
-
     @Test fun qualityTiersMatchLinux523Rules() {
         val ideal = AudioQualityRules.classify("a.wav", "WAV", "pcm_f32le", 48_000, 1, 32, true, true, peakDbfs = -6.0)
         val adequate = AudioQualityRules.classify("a.flac", "FLAC", "flac", 48_000, 1, 24, false, true, peakDbfs = -6.0)

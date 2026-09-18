@@ -69,10 +69,7 @@ import com.gbw.android.domain.AudioKind
 import com.gbw.android.domain.FilePitchRules
 import com.gbw.android.domain.OutputFormat
 import com.gbw.android.domain.QualityStatus
-import com.gbw.android.domain.SeparationMode
 import com.gbw.android.domain.Tunings
-import com.gbw.android.separation.BsRoformerContract
-import com.gbw.android.separation.BsRoformerModelManager
 import com.gbw.android.separation.DemucsRuntimeMonitor
 import com.gbw.android.separation.SeparationResultFiles
 import com.gbw.android.separation.SeparationResultStore
@@ -209,7 +206,7 @@ private fun PageContent(
                 AppPage.PROJECTS -> PlaceholderScreen("Projetos", "Persistência cross-platform/SAF entra no M3, preservando a v5.23 como referência.")
                 AppPage.LOGS -> PlaceholderScreen("Logs", "Logs de jobs e processamento serão persistidos por operação.")
                 AppPage.FILE_PITCH -> FilePitchScreen()
-                AppPage.SETTINGS -> PlaceholderScreen("Configurações", "Separação Rápida é o padrão Android; demais preferências seguirão a v5.23.")
+                AppPage.SETTINGS -> PlaceholderScreen("Configurações", "As preferências do fluxo Android permanecem alinhadas à v5.23 sem seleção de motor de separação.")
                 AppPage.SYSTEM -> SystemScreen()
             }
         }
@@ -328,14 +325,9 @@ private fun SeparationScreen(
     var playingStem by remember { mutableStateOf<String?>(null) }
     var exportBusy by remember { mutableStateOf(false) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
-    var mode by rememberSaveable { mutableStateOf(SeparationMode.androidDefault.name) }
     var uriText by rememberSaveable(initialUriText) { mutableStateOf(initialUriText) }
-    var technicalOpen by rememberSaveable { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
-    var modelCandidatePresent by remember {
-        mutableStateOf(BsRoformerModelManager.candidateLooksInstalled(context))
-    }
 
     DisposableEffect(previewPlayer) {
         onDispose { previewPlayer.release() }
@@ -390,24 +382,6 @@ private fun SeparationScreen(
         }
     }
 
-    val modelPicker =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri != null) {
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                    )
-                } catch (_: Exception) {
-                }
-                ContextCompat.startForegroundService(
-                    context,
-                    MediaProcessingService.bsRoformerImportIntent(context, uri),
-                )
-                resultMessage = "Importação/verificação do PTE iniciada em segundo plano."
-            }
-        }
-
     LaunchedEffect(Unit) {
         while (isActive) {
             jobState = jobStore.loadReconciled()
@@ -420,9 +394,7 @@ private fun SeparationScreen(
             if (availableResult == null) {
                 availableResult = jobState
                     ?.takeIf {
-                        it.state == "SUCCESS" &&
-                            (it.type == "separation-quick" ||
-                                it.type == "separation-high-quality")
+                        it.state == "SUCCESS" && SeparationResultFiles.isDemucsType(it.type)
                     }
                     ?.let {
                         resultStore.recoverExisting(
@@ -433,19 +405,11 @@ private fun SeparationScreen(
                         )
                     }
             }
-            modelCandidatePresent =
-                BsRoformerModelManager.candidateLooksInstalled(context)
             delay(500)
         }
     }
 
-    val selectedMode = SeparationMode.valueOf(mode)
-    val relevantTypes = setOf(
-        "separation-quick",
-        "separation-high-quality",
-        "bsroformer-model-import",
-    )
-    val separationJob = jobState?.takeIf { it.type in relevantTypes }
+    val separationJob = jobState?.takeIf { SeparationResultFiles.isDemucsType(it.type) }
     val appJobBusy =
         jobState?.state == "RUNNING" || jobState?.state == "CANCELLING"
 
@@ -459,40 +423,10 @@ private fun SeparationScreen(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Escolha entre o modo rápido para uso diário e a Alta qualidade para máxima separação. O arquivo selecionado em Fonte é reaproveitado automaticamente.",
+            "O GBW Android usa exclusivamente Demucs htdemucs_6s para gerar seis stems. " +
+                "O arquivo selecionado em Fonte é reaproveitado automaticamente.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-
-        SeparationMode.entries.forEach { item ->
-            OutlinedCard(
-                onClick = { if (!appJobBusy) mode = item.name },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(
-                        selected = mode == item.name,
-                        onClick = { if (!appJobBusy) mode = item.name },
-                        enabled = !appJobBusy,
-                    )
-                    Column(Modifier.padding(start = 8.dp)) {
-                        Text(item.publicLabel, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            when (item) {
-                                SeparationMode.QUICK ->
-                                    "Mais eficiente • 6 stems • recomendado para uso diário"
-                                SeparationMode.HIGH_QUALITY ->
-                                    "Maior fidelidade • processamento mais pesado • 6 stems"
-                                SeparationMode.COMPARE ->
-                                    "Executa os dois motores para comparação"
-                            }
-                        )
-                    }
-                }
-            }
-        }
 
         Card(Modifier.fillMaxWidth()) {
             Column(
@@ -516,129 +450,35 @@ private fun SeparationScreen(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-
-                if (selectedMode == SeparationMode.QUICK) {
-                    Text(
-                        "No primeiro uso, o GBW baixa aproximadamente 54,9 MB do " +
-                            "htdemucs_6s e valida bytes + SHA-256.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-
-                if (selectedMode == SeparationMode.HIGH_QUALITY) {
-                    Text(
-                        if (modelCandidatePresent) {
-                            "Modelo de Alta qualidade presente. A integridade completa será revalidada antes de processar."
-                        } else {
-                            "O modelo de Alta qualidade ainda precisa ser importado neste dispositivo."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    OutlinedButton(
-                        onClick = { modelPicker.launch(arrayOf("*/*")) },
-                        enabled = !appJobBusy,
-                    ) {
-                        Text(
-                            if (modelCandidatePresent) {
-                                "Reimportar modelo de Alta qualidade…"
-                            } else {
-                                "Importar modelo de Alta qualidade…"
-                            }
-                        )
-                    }
-                    TextButton(onClick = { technicalOpen = !technicalOpen }) {
-                        Text(if (technicalOpen) "▾ Ocultar detalhes técnicos" else "▸ Detalhes técnicos")
-                    }
-                    if (technicalOpen) {
-                        Text(
-                            "BS-RoFormer-SW • ExecuTorch ${BsRoformerContract.EXECUTORCH_VERSION} / ${BsRoformerContract.PTE_BACKEND}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            "PTE: ${BsRoformerContract.PTE_FILE_NAME} • ${BsRoformerContract.PTE_BYTES} bytes • SHA-256 " +
-                                BsRoformerContract.PTE_SHA256.take(12) + "…",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            "Os pesos upstream ainda não têm licença de redistribuição estabelecida; este build não republica nem baixa automaticamente o PTE.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
                 Text(
-                    "O áudio é preparado em float32 estéreo/44,1 kHz. O processamento " +
-                        "é segmentado e não mantém a música inteira nem seis stems em RAM.",
+                    "No primeiro uso, o GBW baixa aproximadamente 54,9 MB do htdemucs_6s " +
+                        "e valida tamanho + SHA-256 antes de processar.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "O áudio é preparado em float32 estéreo/44,1 kHz. A inferência usa um " +
+                        "modelo por vez, com BLAS interno controlado e stems gravados por streaming.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
 
-        when (selectedMode) {
-            SeparationMode.QUICK -> {
-                Button(
-                    onClick = {
-                        val input = uriText.takeIf { it.isNotBlank() }?.let(Uri::parse)
-                        if (input == null) {
-                            resultMessage = "Selecione um arquivo de áudio antes de iniciar."
-                        } else {
-                            ContextCompat.startForegroundService(
-                                context,
-                                MediaProcessingService.demucsQuickIntent(context, input),
-                            )
-                            resultMessage = "Separação Rápida iniciada em segundo plano."
-                        }
-                    },
-                    enabled = uriText.isNotBlank() && !appJobBusy,
-                ) {
-                    Text("Iniciar Separação Rápida")
+        Button(
+            onClick = {
+                val input = uriText.takeIf { it.isNotBlank() }?.let(Uri::parse)
+                if (input == null) {
+                    resultMessage = "Selecione um arquivo de áudio antes de iniciar."
+                } else {
+                    ContextCompat.startForegroundService(
+                        context,
+                        MediaProcessingService.demucsIntent(context, input),
+                    )
+                    resultMessage = "Separação iniciada em segundo plano."
                 }
-            }
-
-            SeparationMode.HIGH_QUALITY -> {
-                Button(
-                    onClick = {
-                        val input = uriText.takeIf { it.isNotBlank() }?.let(Uri::parse)
-                        if (input == null) {
-                            resultMessage = "Selecione um arquivo de áudio antes de iniciar."
-                        } else if (!modelCandidatePresent) {
-                            resultMessage = "Importe primeiro o PTE autoritativo."
-                        } else {
-                            ContextCompat.startForegroundService(
-                                context,
-                                MediaProcessingService.bsRoformerHighQualityIntent(
-                                    context,
-                                    input,
-                                ),
-                            )
-                            resultMessage =
-                                "Alta qualidade iniciada. Cancelamento é cooperativo " +
-                                    "entre chamadas do modelo."
-                        }
-                    },
-                    enabled =
-                        uriText.isNotBlank() &&
-                            modelCandidatePresent &&
-                            !appJobBusy,
-                ) {
-                    Text("Iniciar Alta qualidade")
-                }
-            }
-
-            SeparationMode.COMPARE -> {
-                OutlinedCard(Modifier.fillMaxWidth()) {
-                    Column(
-                        Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text("Comparar ainda indisponível", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Será habilitado depois da homologação física da Alta qualidade neste hardware Android."
-                        )
-                    }
-                }
-            }
+            },
+            enabled = uriText.isNotBlank() && !appJobBusy,
+        ) {
+            Text("Separar")
         }
 
         separationJob?.let { job ->
@@ -647,7 +487,7 @@ private fun SeparationScreen(
                     Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(job.label, fontWeight = FontWeight.SemiBold)
+                    Text("Separação", fontWeight = FontWeight.SemiBold)
                     Text("${job.state} • ${job.progress}%")
                     Text(job.message)
                     if (job.state == "RUNNING") {
@@ -659,13 +499,7 @@ private fun SeparationScreen(
                                 )
                             }
                         ) {
-                            Text(
-                                if (job.type == "bsroformer-model-import") {
-                                    "Cancelar importação"
-                                } else {
-                                    "Cancelar separação"
-                                }
-                            )
+                            Text("Cancelar separação")
                         }
                     }
                 }
@@ -720,18 +554,15 @@ private fun SeparationResultsCard(
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Stems disponíveis", fontWeight = FontWeight.SemiBold)
-            val mode =
-                if (result.record.type == "separation-quick") "Separação Rápida"
-                else "Alta qualidade"
             val durationSeconds = result.record.frames / 44_100.0
             Text(
-                "$mode • 6 WAV float32 • 44,1 kHz • ${"%.1f".format(durationSeconds)} s • " +
+                "Demucs htdemucs_6s • 6 WAV float32 • 44,1 kHz • ${"%.1f".format(durationSeconds)} s • " +
                     formatStemBytes(result.totalBytes),
                 style = MaterialTheme.typography.bodySmall,
             )
             if (result.record.chunkCount > 0) {
                 Text(
-                    "Motor Android otimizado • ${result.record.chunkCount} trechos • " +
+                    "Motor Android otimizado • BLAS ${result.record.blasThreads} threads • ${result.record.chunkCount} trechos • " +
                         "mediana ${"%.1f".format(result.record.medianChunkMillis / 1_000.0)} s • " +
                         "máx ${"%.1f".format(result.record.maxChunkMillis / 1_000.0)} s • " +
                         "térmico ${DemucsRuntimeMonitor.thermalLabel(result.record.maxThermalStatus)}",
@@ -766,7 +597,7 @@ private fun SeparationResultsCard(
             }
             Text(
                 "A exportação usa o seletor de pastas do Android e cria seis WAVs " +
-                    "GBW_Quick/HQ_<job>_<stem>.wav. Os arquivos internos continuam preservados.",
+                    "GBW_Demucs_<job>_<stem>.wav. Os arquivos internos continuam preservados.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1101,9 +932,6 @@ private fun SystemScreen() {
     val jobStore = remember(context) { JobStore(context) }
     var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
     var launchError by remember { mutableStateOf<String?>(null) }
-    var modelCandidatePresent by remember {
-        mutableStateOf(BsRoformerModelManager.candidateLooksInstalled(context))
-    }
     var workerExitSummary by remember {
         mutableStateOf(WorkerExitDiagnostics.latestSummary(context))
     }
@@ -1111,7 +939,6 @@ private fun SystemScreen() {
     LaunchedEffect(Unit) {
         while (isActive) {
             jobState = jobStore.loadReconciled()
-            modelCandidatePresent = BsRoformerModelManager.candidateLooksInstalled(context)
             workerExitSummary = WorkerExitDiagnostics.latestSummary(context)
             delay(500)
         }
@@ -1125,7 +952,7 @@ private fun SystemScreen() {
     ) {
         Text("Sistema", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Diagnóstico do build e dos motores instalados.",
+            "Diagnóstico do build e do runtime DSP.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -1135,7 +962,7 @@ private fun SystemScreen() {
                 StatusLine("Versão", BuildConfig.VERSION_NAME)
                 StatusLine("Android", "${Build.VERSION.RELEASE} • API ${Build.VERSION.SDK_INT}")
                 StatusLine("Baseline funcional", "Linux v5.23")
-                StatusLine("Separação padrão", "Rápida / Demucs")
+                StatusLine("Separação", "Demucs htdemucs_6s")
                 StatusLine("Worker DSP", ":media isolado")
                 StatusLine("ABI inicial", "arm64-v8a")
             }
@@ -1148,11 +975,7 @@ private fun SystemScreen() {
                 StatusLine("FFmpeg", "Áudio / SAF")
                 StatusLine("Rubber Band R3", "v4.0.0 / NDK-JNI")
                 StatusLine("Demucs htdemucs_6s", "Implementado")
-                StatusLine(
-                    "BS-RoFormer-SW",
-                    if (modelCandidatePresent) "PTE presente • SHA validado na execução" else "PTE não instalado",
-                )
-                StatusLine("ExecuTorch", "1.3.1 / XNNPACK")
+                StatusLine("BLAS", "OpenBLAS 0.3.34 • 2 threads padrão")
             }
         }
 

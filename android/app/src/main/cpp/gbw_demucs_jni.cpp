@@ -17,6 +17,12 @@ constexpr int kRequiredChannels = 2;
 constexpr int kSourceCount = 6;
 constexpr int kModelWindowFrames = 343980;
 std::atomic_bool g_cancelled{false};
+std::atomic_int g_blas_threads{1};
+
+extern "C" {
+void openblas_set_num_threads(int num_threads);
+int openblas_get_num_threads(void);
+}
 
 struct Cancelled final : std::exception {
     const char *what() const noexcept override { return "Demucs inference cancelled"; }
@@ -30,7 +36,7 @@ struct JavaCallbackFailure final : std::exception {
  * GBW already streams one fixed 7.8 s analysis window with an outer 5.5 s core
  * and 1.15 s context on both sides. Calling demucs_inference() here would add
  * another shift/split/overlap layer to that already segmented window. For the
- * Android QUICK engine we instead reuse the exported model_inference() kernel
+ * Android Demucs engine we instead reuse the exported model_inference() kernel
  * directly, keeping one set of expensive scratch buffers alive for the model
  * lifetime. The six-source checkpoint and model window remain unchanged.
  */
@@ -44,6 +50,10 @@ struct GbwDemucsContext {
     demucscpp::stft_buffers stft{buffers.padded_segment_samples};
     std::mutex inferenceMutex;
 };
+
+bool supportedBlasThreads(int threads) {
+    return threads == 1 || threads == 2 || threads == 4;
+}
 
 GbwDemucsContext *contextFromHandle(jlong handle) {
     if (handle == 0) throw std::invalid_argument("Demucs model handle is null");
@@ -86,9 +96,34 @@ Java_com_gbw_android_separation_DemucsNative_nativeIdentity(JNIEnv *env, jobject
     const std::string identity =
         std::string("demucs.cpp@") + GBW_DEMUCS_CPP_COMMIT +
         ";eigen@" + GBW_EIGEN_COMMIT +
+        ";openblas@" + GBW_OPENBLAS_COMMIT +
         ";model=htdemucs_6s;sample_rate=44100;channels=2;stems=6"
-        ";engine=direct-segment-v1;window_frames=343980;parallel=eigen-off";
+        ";engine=direct-segment-v1;window_frames=343980;parallel=openblas"
+        ";blas_threads=" + std::to_string(openblas_get_num_threads());
     return env->NewStringUTF(identity.c_str());
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_gbw_android_separation_DemucsNative_nativeConfigureBlasThreads(
+    JNIEnv *env, jobject, jint threads) {
+    try {
+        if (!supportedBlasThreads(threads)) {
+            throw std::invalid_argument("Demucs BLAS threads must be 1, 2, or 4");
+        }
+        openblas_set_num_threads(threads);
+        const int actual = openblas_get_num_threads();
+        if (actual != threads) {
+            throw std::runtime_error("OpenBLAS did not honor the requested thread count");
+        }
+        g_blas_threads.store(actual, std::memory_order_release);
+        return actual;
+    } catch (const std::invalid_argument &error) {
+        throwJava(env, "java/lang/IllegalArgumentException", error.what());
+        return 0;
+    } catch (const std::exception &error) {
+        throwJava(env, "java/lang/IllegalStateException", error.what());
+        return 0;
+    }
 }
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -96,6 +131,7 @@ Java_com_gbw_android_separation_DemucsNative_nativeCreateModel(
     JNIEnv *env, jobject, jstring modelPath) {
     try {
         const std::string path = fromJString(env, modelPath);
+        openblas_set_num_threads(g_blas_threads.load(std::memory_order_acquire));
         auto context = std::make_unique<GbwDemucsContext>();
         if (!demucscpp::load_demucs_model(path, &context->model)) {
             throw std::runtime_error("Demucs model could not be loaded");

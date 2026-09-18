@@ -22,6 +22,7 @@ internal data class StoredSeparationResult(
     val medianChunkMillis: Long = 0L,
     val maxChunkMillis: Long = 0L,
     val maxThermalStatus: Int = DemucsRuntimeMonitor.THERMAL_UNAVAILABLE,
+    val blasThreads: Int = 1,
 )
 
 internal data class SeparationStem(val name: String, val file: File)
@@ -33,13 +34,22 @@ internal data class ValidatedSeparationResult(
 )
 
 internal object SeparationResultFiles {
+    const val DEMUCS_TYPE = "separation-demucs"
+
+    // Compatibility only: alpha7/alpha8 stored completed Demucs jobs under this type/path.
+    // Keeping this reader preserves already-generated stems across an in-place alpha9 install.
+    private const val LEGACY_ALPHA8_DEMUCS_TYPE = "separation-quick"
+
     val stemNames = listOf("drums", "bass", "other", "vocals", "guitar", "piano")
+
+    fun isDemucsType(type: String): Boolean =
+        type == DEMUCS_TYPE || type == LEGACY_ALPHA8_DEMUCS_TYPE
 
     fun outputDirectory(filesDir: File, jobId: String, type: String): File? {
         if (jobId.isBlank()) return null
         val leaf = when (type) {
-            "separation-quick" -> "quick"
-            "separation-high-quality" -> "high-quality"
+            DEMUCS_TYPE -> "demucs"
+            LEGACY_ALPHA8_DEMUCS_TYPE -> "quick"
             else -> return null
         }
         return File(filesDir, "jobs/$jobId/separation/$leaf")
@@ -75,19 +85,12 @@ internal class SeparationResultStore(context: Context) {
     private val tempFile = File(stateDir, "last_separation.json.tmp")
     private val lockFile = File(stateDir, "last_separation.lock")
 
-    fun saveQuick(jobId: String, result: DemucsSeparationResult) = save(
+    fun saveDemucs(jobId: String, result: DemucsSeparationResult) = save(
         StoredSeparationResult(
-            jobId, "separation-quick", System.currentTimeMillis(), result.frames,
+            jobId, SeparationResultFiles.DEMUCS_TYPE, System.currentTimeMillis(), result.frames,
             result.elapsedMillis, result.peakObservedPssKb, result.runtimeIdentity,
             result.chunkCount, result.medianChunkMillis, result.maxChunkMillis,
-            result.maxThermalStatus,
-        )
-    )
-
-    fun saveHighQuality(jobId: String, result: BsRoformerSeparationResult) = save(
-        StoredSeparationResult(
-            jobId, "separation-high-quality", System.currentTimeMillis(), result.frames,
-            result.elapsedMillis, result.peakObservedPssKb, result.spectralIdentity,
+            result.maxThermalStatus, result.blasThreads,
         )
     )
 
@@ -104,6 +107,7 @@ internal class SeparationResultStore(context: Context) {
         startedAt: Long,
         message: String,
     ): ValidatedSeparationResult? {
+        if (!SeparationResultFiles.isDemucsType(type)) return null
         val provisional = StoredSeparationResult(
             jobId = jobId,
             type = type,
@@ -113,7 +117,8 @@ internal class SeparationResultStore(context: Context) {
                 ?.toLongOrNull()?.times(1_000L) ?: 0L,
             peakPssKb = PSS_MIB.find(message)?.groupValues?.getOrNull(1)
                 ?.toLongOrNull()?.times(1_024L) ?: 0L,
-            runtimeIdentity = "recovered-pre-alpha8;startedAt=$startedAt",
+            runtimeIdentity = "recovered-legacy-demucs;startedAt=$startedAt",
+            blasThreads = 1,
         )
         val validated = SeparationResultFiles.validate(appContext.filesDir, provisional) ?: return null
         save(validated.record)
@@ -136,6 +141,7 @@ internal class SeparationResultStore(context: Context) {
                 json.optLong("medianChunkMillis", 0L),
                 json.optLong("maxChunkMillis", 0L),
                 json.optInt("maxThermalStatus", DemucsRuntimeMonitor.THERMAL_UNAVAILABLE),
+                json.optInt("blasThreads", 1),
             )
         }.getOrElse {
             val corrupt = File(
@@ -160,6 +166,7 @@ internal class SeparationResultStore(context: Context) {
             .put("medianChunkMillis", record.medianChunkMillis)
             .put("maxChunkMillis", record.maxChunkMillis)
             .put("maxThermalStatus", record.maxThermalStatus)
+            .put("blasThreads", record.blasThreads)
             .toString().toByteArray(Charsets.UTF_8)
         FileOutputStream(tempFile).use { out ->
             out.write(bytes); out.flush(); out.fd.sync()

@@ -1,15 +1,5 @@
 package com.gbw.android.domain
 
-enum class SeparationMode(val code: String, val publicLabel: String) {
-    QUICK("B", "Rápida — recomendada no Android"),
-    HIGH_QUALITY("A", "Alta qualidade"),
-    COMPARE("AB", "Comparar as duas");
-
-    companion object {
-        val androidDefault = QUICK
-    }
-}
-
 enum class PitchMode { TUNING, MANUAL, NONE }
 
 enum class AudioKind { INSTRUMENT_OR_MIX, VOCAL }
@@ -23,8 +13,6 @@ enum class OutputFormat(val label: String, val extension: String) {
 data class WorkflowConfig(
     val artist: String = "",
     val song: String = "",
-    val separatorMode: SeparationMode = SeparationMode.androidDefault,
-    val finalSeparator: SeparationMode = SeparationMode.androidDefault,
     val pitchMode: PitchMode = PitchMode.TUNING,
     val originalTuning: String = "",
     val targetTuning: String = "Drop D",

@@ -7,7 +7,6 @@ fun main() {
     check(Tunings.delta("E Standard", "Drop D") == null)
     check(TextNormalization.titleCase("WOLVES AT THE GATE") == "Wolves At The Gate")
     check(TextNormalization.searchKey("Árvore") == "arvore")
-    check(SeparationMode.androidDefault == SeparationMode.QUICK)
 
     val ideal = AudioQualityRules.classify(
         displayName = "guitar.wav", format = "WAV", codec = "pcm_f32le",

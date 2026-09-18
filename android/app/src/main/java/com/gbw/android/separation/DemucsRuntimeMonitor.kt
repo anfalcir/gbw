@@ -65,7 +65,7 @@ internal class DemucsRuntimeMonitor(context: Context) {
 
     companion object {
         const val THERMAL_UNAVAILABLE = -1
-        private const val SAMPLE_INTERVAL_MS = 750L
+        internal const val SAMPLE_INTERVAL_MS = 4_000L
 
         fun thermalLabel(status: Int): String = when (status) {
             THERMAL_UNAVAILABLE -> "indisponível"

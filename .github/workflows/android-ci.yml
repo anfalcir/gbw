@@ -16,7 +16,7 @@ jobs:
   build:
     name: Test, lint and build APK
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -56,6 +56,14 @@ jobs:
           gradle --version
           sdkmanager --list_installed | head -120
 
+      - name: Demucs-only source architecture gate
+        working-directory: android
+        run: python3 scripts/verify_demucs_only.py --source .
+
+      - name: Notification small-icon mask gate
+        working-directory: android
+        run: python3 scripts/verify_notification_icon.py
+
       - name: Domain parity smoke
         working-directory: android
         run: bash scripts/validate_domain.sh
@@ -63,10 +71,6 @@ jobs:
       - name: Rubber Band R3 host golden smoke
         working-directory: android
         run: bash scripts/validate_rubberband_host.sh
-
-      - name: BS-RoFormer spectral DSP host golden smoke
-        working-directory: android
-        run: bash scripts/validate_bs_roformer_spectral_host.sh
 
       - name: Cache pinned Demucs checkpoint
         uses: actions/cache@v4
@@ -101,12 +105,22 @@ jobs:
           test -f "$APK"
           unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_rubberband.so"
           unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_demucs.so"
-          unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libgbw_bsroformer_spectral.so"
+          if unzip -l "$APK" | grep -Eqi 'bsroformer|pffft|executorch|xnnpack|\.pte'; then
+            echo "Dead multi-engine runtime remains in APK" >&2
+            exit 1
+          fi
+          if unzip -l "$APK" | grep -Fq "lib/arm64-v8a/libopenblas.so"; then
+            echo "OpenBLAS must be statically linked into libgbw_demucs.so" >&2
+            exit 1
+          fi
           echo "APK_NATIVE_R3_OK"
-          echo "APK_NATIVE_DEMUCS_OK"
-          echo "APK_NATIVE_BSROFORMER_SPECTRAL_OK"
+          echo "APK_NATIVE_DEMUCS_OPENBLAS_STATIC_OK"
 
-      - name: Verify optimized Demucs runtime
+      - name: Verify Demucs-only APK architecture
+        working-directory: android
+        run: python3 scripts/verify_demucs_only.py --apk app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Verify optimized Demucs/OpenBLAS runtime
         working-directory: android
         run: python3 scripts/verify_demucs_runtime.py app/build/outputs/apk/debug/app-debug.apk
 
@@ -135,26 +149,23 @@ jobs:
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -f "$APK"
           SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          BYTES="$(stat -c%s "$APK")"
           printf '%s  %s\n' "$SHA256" "app-debug.apk" > app/build/outputs/apk/debug/SHA256SUMS.txt
           {
             echo "commit=${GITHUB_SHA}"
             echo "ref=${GITHUB_REF}"
+            echo "bytes=${BYTES}"
             echo "sha256=${SHA256}"
             echo "workflow_run=${GITHUB_RUN_ID}"
             echo "rubberband_version=4.0.0"
             echo "rubberband_commit=1d95888bec3ae0a17c0c4af791810d5a63f6bc35"
             echo "demucs_cpp_commit=f1206e9adeea103aef4a636b9e62297cf1f8e34e"
             echo "eigen_commit=dd8c71e62852b2fe429edb6682ac91fd1c578a26"
-            echo "pffft_commit=e1dbebc9fbf74247d12f094accbbc470aaee8715"
-            echo "bs_roformer_source_commit=244cddd4f7611956eb1cc4958e82b65b4891c019"
-            echo "bs_roformer_checkpoint_sha256=24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e"
-            echo "bs_roformer_pte_file=GBW-BS-RoFormer-SW-executorch-1.3.1-T1151.pte"
-            echo "bs_roformer_pte_bytes=700284960"
-            echo "bs_roformer_pte_sha256=8c3cc68404b7fadb2a41ec332b0493290d956f9490dc5c21c5120ee596807182"
-            echo "bs_roformer_pte_backend=XNNPACK"
-            echo "bs_roformer_executorch_version=1.3.1"
-            echo "bs_roformer_torch_export_version=2.12.1+cpu"
-            echo "bs_roformer_pte_source_run=35289168951"
+            echo "openblas_version=0.3.34"
+            echo "openblas_commit=e0166008be8e466242aa76b2ff75ce3f0fbf574a"
+            echo "demucs_blas_default_threads=2"
+            echo "demucs_blas_supported_threads=1,2,4"
+            echo "demucs_chunk_parallelism=1"
             echo "demucs_model_contract=htdemucs_6s"
             echo "demucs_model_source_revision=5f5daffffcf06ad7b27a7285da327e18ea62068a"
             echo "demucs_model_bytes=54855129"
@@ -164,15 +175,18 @@ jobs:
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           {
             echo "## GBW Android build"
-            echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- APK SHA-256: \`${SHA256}\`"
-            echo "- Rubber Band: \`4.0.0 @ 1d95888bec3ae0a17c0c4af791810d5a63f6bc35\`"
-            echo "- demucs.cpp: \`f1206e9adeea103aef4a636b9e62297cf1f8e34e\`"
-            echo "- BS-RoFormer spectral DSP: \`PFFFT @ e1dbebc9fbf74247d12f094accbbc470aaee8715\`"
-            echo "- Demucs model: \`htdemucs_6s @ 5f5daffffcf06ad7b27a7285da327e18ea62068a\`"
-            echo "- Demucs model SHA-256: \`09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856\`"
-            echo "- Native ABI: \`arm64-v8a\`"
-            echo "- Artifact: \`GBW-Android-debug-${GITHUB_RUN_NUMBER}\`"
+            echo "- Commit: `${GITHUB_SHA}`"
+            echo "- APK bytes: `${BYTES}`"
+            echo "- APK SHA-256: `${SHA256}`"
+            echo "- Rubber Band: `4.0.0 @ 1d95888bec3ae0a17c0c4af791810d5a63f6bc35`"
+            echo "- demucs.cpp: `f1206e9adeea103aef4a636b9e62297cf1f8e34e`"
+            echo "- Eigen: `dd8c71e62852b2fe429edb6682ac91fd1c578a26`"
+            echo "- OpenBLAS: `0.3.34 @ e0166008be8e466242aa76b2ff75ce3f0fbf574a`"
+            echo "- Demucs BLAS policy: `1/2/4 threads; default 2; one chunk at a time`"
+            echo "- Demucs model: `htdemucs_6s @ 5f5daffffcf06ad7b27a7285da327e18ea62068a`"
+            echo "- Demucs model SHA-256: `09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856`"
+            echo "- Native ABI: `arm64-v8a`"
+            echo "- Artifact: `GBW-Android-debug-${GITHUB_RUN_NUMBER}`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload debug APK
