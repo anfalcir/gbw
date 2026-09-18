@@ -84,6 +84,7 @@ import com.gbw.android.separation.SeparationStemExporter
 import com.gbw.android.separation.StemPreviewPlayer
 import com.gbw.android.separation.ValidatedSeparationResult
 import com.gbw.android.source.SourceSearchCoordinator
+import com.gbw.android.source.PreparedSourceStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -234,8 +235,13 @@ private fun SourceScreen(
     var inspectionError by remember { mutableStateOf<String?>(null) }
     var inspecting by remember { mutableStateOf(false) }
     val onlineScope = rememberCoroutineScope()
-    val onlineCoordinator = remember { SourceSearchCoordinator() }
+    val onlineCoordinator = remember(context) { SourceSearchCoordinator(context) }
     val searchState: SourceSearchViewModel = viewModel()
+    val sourceJobStore = remember(context) { JobStore(context) }
+    val preparedSourceStore = remember(context) { PreparedSourceStore(context) }
+    var sourceJobState by remember { mutableStateOf(sourceJobStore.loadReconciled()) }
+    var consumedPreparedJobId by rememberSaveable { mutableStateOf("") }
+    var autoContinuePrepared by rememberSaveable { mutableStateOf(false) }
     val selectedDisplayName = remember(selectedUriText) {
         selectedUriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
     }
@@ -253,6 +259,27 @@ private fun SourceScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            sourceJobState = sourceJobStore.loadReconciled()
+            val job = sourceJobState
+            if (
+                job?.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
+                job.state == "SUCCESS" &&
+                job.id != consumedPreparedJobId
+            ) {
+                val prepared = preparedSourceStore.load()
+                if (prepared?.jobId == job.id && prepared.preparedFile().isFile) {
+                    consumedPreparedJobId = job.id
+                    autoContinuePrepared = true
+                    onSelectedUri(preparedSourceStore.contentUri(prepared).toString())
+                    searchState.updateMessage("Fonte online baixada e preparada com sucesso.")
+                }
+            }
+            delay(750)
+        }
+    }
+
     LaunchedEffect(selectedUriText) {
         inspection = null
         inspectionError = null
@@ -267,13 +294,20 @@ private fun SourceScreen(
         }
     }
 
+    LaunchedEffect(autoContinuePrepared, inspection, inspectionError) {
+        if (autoContinuePrepared && inspection != null && inspectionError == null) {
+            autoContinuePrepared = false
+            onContinue()
+        }
+    }
+
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("Fonte", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Escolha o áudio que será usado no fluxo do GBW. A seleção local já usa o SAF e permanece disponível para a etapa de Separação.",
+            "Escolha um arquivo local ou deixe o GBW pesquisar, baixar e preparar automaticamente a melhor fonte online antes da Separação.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -307,8 +341,8 @@ private fun SourceScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "O GBW pesquisa e ranqueia resultados usando o mesmo contrato de identidade do Linux 5.23. " +
-                        "Nesta etapa, a descoberta online não baixa nem extrai mídia automaticamente.",
+                    "O GBW usa o mesmo contrato do Linux 5.23: pesquisa, inspeciona e ranqueia fontes; " +
+                        "depois baixa automaticamente o candidato selecionado e prepara o áudio para Separação.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -385,6 +419,8 @@ private fun SourceScreen(
                     OnlineSourceCandidateCard(
                         candidate = candidate,
                         recommended = index == 0 && !candidate.previewOnly,
+                        selected = candidate.url == searchState.selectedUrl,
+                        onSelect = { searchState.selectCandidate(candidate) },
                         onOpen = {
                             runCatching {
                                 context.startActivity(
@@ -400,12 +436,72 @@ private fun SourceScreen(
                     )
                 }
 
-                if (searchState.results.isNotEmpty()) {
+                val selectedCandidate = searchState.selectedCandidate()
+                val sourceJobRunning =
+                    sourceJobState?.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
+                        (sourceJobState?.state == "RUNNING" || sourceJobState?.state == "CANCELLING")
+                if (selectedCandidate != null) {
                     Text(
-                        "Os resultados são links de descoberta. O GBW não baixa nem extrai mídia automaticamente nesta etapa.",
+                        if (selectedCandidate.automaticDownloadSupported) {
+                            "✓ Fonte ativa: " + selectedCandidate.provider.publicLabel + " — " + selectedCandidate.title
+                        } else {
+                            "Fonte de catálogo: " + selectedCandidate.provider.publicLabel +
+                                ". Este resultado serve como referência, mas não oferece aquisição automática."
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (selectedCandidate.automaticDownloadSupported) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     )
+                    Button(
+                        onClick = {
+                            val candidate = searchState.selectedCandidate() ?: return@Button
+                            val intent = MediaProcessingService.sourcePrepareIntent(
+                                context = context,
+                                url = candidate.url,
+                                provider = candidate.provider,
+                                formatId = candidate.formatId,
+                                expectedDurationSeconds = candidate.durationSeconds,
+                                title = candidate.title,
+                            )
+                            ContextCompat.startForegroundService(context, intent)
+                            sourceJobState = sourceJobStore.loadReconciled()
+                            searchState.updateMessage("Preparando fonte selecionada em segundo plano…")
+                        },
+                        enabled = selectedCandidate.automaticDownloadSupported &&
+                            !selectedCandidate.previewOnly &&
+                            !sourceJobRunning,
+                    ) {
+                        Text(if (sourceJobRunning) "Preparando…" else "Preparar fonte selecionada")
+                    }
+                }
+
+                sourceJobState?.takeIf { it.type == MediaProcessingService.SOURCE_PREPARE_TYPE }?.let { job ->
+                    OutlinedCard(Modifier.fillMaxWidth()) {
+                        Column(
+                            Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text("Preparação da fonte", fontWeight = FontWeight.SemiBold)
+                            Text(job.state + " • " + job.progress + "%")
+                            Text(job.message, style = MaterialTheme.typography.bodySmall)
+                            if (job.state == "RUNNING") {
+                                OutlinedButton(
+                                    onClick = {
+                                        ContextCompat.startForegroundService(
+                                            context,
+                                            Intent(context, MediaProcessingService::class.java)
+                                                .setAction(MediaProcessingService.ACTION_CANCEL),
+                                        )
+                                    },
+                                ) {
+                                    Text("Cancelar preparação")
+                                }
+                            }
+                        }
+                    }
                 }
 
                 val broadRequest = SourceSearchRequest(
@@ -468,26 +564,30 @@ private fun SourceScreen(
                         if (uri == null) {
                             searchState.updateMessage("Informe uma URL válida iniciando com http:// ou https://.")
                         } else {
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                            }.onFailure { error ->
-                                searchState.updateMessage(
-                                    "Não foi possível abrir a URL: " +
-                                        (error.message ?: "nenhum aplicativo compatível."),
-                                )
-                            }
+                            val intent = MediaProcessingService.sourcePrepareIntent(
+                                context = context,
+                                url = uri.toString(),
+                                provider = com.gbw.android.domain.SourceProvider.OTHER,
+                                formatId = "",
+                                expectedDurationSeconds = 0.0,
+                                title = searchState.song.trim(),
+                            )
+                            ContextCompat.startForegroundService(context, intent)
+                            searchState.updateMessage("Preparando URL manual em segundo plano…")
                         }
                     },
-                    enabled = manualUri != null,
+                    enabled = manualUri != null &&
+                        !(sourceJobState?.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
+                            sourceJobState?.state == "RUNNING"),
                 ) {
-                    Text("Abrir URL")
+                    Text("Usar URL e preparar")
                 }
             }
         }
 
         Button(
             onClick = onContinue,
-            enabled = selectedUriText.isNotBlank() && !inspecting,
+            enabled = selectedUriText.isNotBlank() && inspection != null && inspectionError == null && !inspecting,
         ) {
             Text("Continuar para Separação")
         }
@@ -498,6 +598,8 @@ private fun SourceScreen(
 private fun OnlineSourceCandidateCard(
     candidate: RankedSourceCandidate,
     recommended: Boolean,
+    selected: Boolean,
+    onSelect: () -> Unit,
     onOpen: () -> Unit,
 ) {
     OutlinedCard(Modifier.fillMaxWidth()) {
@@ -544,8 +646,29 @@ private fun OnlineSourceCandidateCard(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            OutlinedButton(onClick = onOpen) {
-                Text("Abrir fonte")
+            if (selected) {
+                Text(
+                    "✓ Selecionada",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onSelect,
+                    enabled = !candidate.previewOnly && candidate.automaticDownloadSupported && !selected,
+                ) {
+                    Text(
+                        when {
+                            selected -> "Selecionada"
+                            candidate.automaticDownloadSupported -> "Selecionar"
+                            else -> "Somente catálogo"
+                        }
+                    )
+                }
+                OutlinedButton(onClick = onOpen) {
+                    Text("Abrir fonte")
+                }
             }
         }
     }

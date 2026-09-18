@@ -21,11 +21,15 @@ import com.gbw.android.audio.FilePitchRenderRequest
 import com.gbw.android.audio.FilePitchRenderer
 import com.gbw.android.domain.AudioKind
 import com.gbw.android.domain.OutputFormat
+import com.gbw.android.domain.SourceProvider
 import com.gbw.android.separation.DemucsNative
 import com.gbw.android.separation.DemucsSeparator
 import com.gbw.android.separation.DemucsRuntimeMonitor
 import com.gbw.android.separation.SeparationResultFiles
 import com.gbw.android.separation.SeparationResultStore
+import com.gbw.android.source.OnlineSourcePrepareRequest
+import com.gbw.android.source.OnlineSourcePreparer
+import com.gbw.android.source.PreparedSourceStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,11 +47,13 @@ class MediaProcessingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var store: JobStore
     private lateinit var separationResults: SeparationResultStore
+    private lateinit var preparedSources: PreparedSourceStore
 
     override fun onCreate() {
         super.onCreate()
         store = JobStore(this)
         separationResults = SeparationResultStore(this)
+        preparedSources = PreparedSourceStore(this)
         ensureChannel()
     }
 
@@ -62,10 +68,12 @@ class MediaProcessingService : Service() {
                 ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
                 ACTION_SELF_TEST -> startSelfTest()
                 ACTION_FILE_PITCH -> startFilePitch(requireNotNull(intent), flags)
+                ACTION_SOURCE_PREPARE -> startSourcePrepare(requireNotNull(intent), flags)
                 ACTION_DEMUCS -> startDemucs(requireNotNull(intent), flags)
             }
             if (
                 action == ACTION_FILE_PITCH ||
+                action == ACTION_SOURCE_PREPARE ||
                 action == ACTION_DEMUCS
             ) {
                 START_REDELIVER_INTENT
@@ -155,6 +163,67 @@ class MediaProcessingService : Service() {
                 finishCancelledIfRunning("Processamento cancelado com cleanup concluído.")
             } catch (error: Exception) {
                 finishError(persisted, error.message ?: "Falha inesperada no Pitch de Arquivo.")
+            } finally {
+                finishForegroundJob()
+            }
+        }
+    }
+
+    private fun startSourcePrepare(intent: Intent, startFlags: Int) {
+        if (activeJob?.isActive == true) return
+        val url = intent.getStringExtra(EXTRA_SOURCE_URL).orEmpty()
+        val provider = intent.getStringExtra(EXTRA_SOURCE_PROVIDER)?.let {
+            runCatching { SourceProvider.valueOf(it) }.getOrNull()
+        }
+        if (url.isBlank() || provider == null) {
+            saveInvalid(SOURCE_PREPARE_TYPE, "Preparar fonte", "Parâmetros inválidos para preparar a fonte online.")
+            return
+        }
+
+        val persisted = PersistedJob(
+            id = intent.getStringExtra(EXTRA_JOB_ID) ?: UUID.randomUUID().toString(),
+            type = SOURCE_PREPARE_TYPE,
+            label = "Preparar fonte",
+            state = "RUNNING",
+            progress = 0,
+            startedAt = System.currentTimeMillis(),
+            message = if ((startFlags and START_FLAG_REDELIVERY) != 0) {
+                "Retomando preparação da fonte após reinício do processo…"
+            } else {
+                "Inspecionando fonte online…"
+            },
+        )
+        store.save(persisted)
+        startAsForeground(notification(persisted))
+        acquireWakeLock()
+
+        val request = OnlineSourcePrepareRequest(
+            url = url,
+            provider = provider,
+            formatId = intent.getStringExtra(EXTRA_SOURCE_FORMAT_ID).orEmpty(),
+            expectedDurationSeconds = intent.getDoubleExtra(EXTRA_SOURCE_DURATION, 0.0),
+            title = intent.getStringExtra(EXTRA_SOURCE_TITLE).orEmpty(),
+        )
+
+        activeJob = scope.launch {
+            try {
+                val result = OnlineSourcePreparer.prepare(
+                    context = this@MediaProcessingService,
+                    request = request,
+                    jobId = persisted.id,
+                ) { progress, message ->
+                    updateJob(persisted, progress, message)
+                }
+                preparedSources.save(result)
+                finishSuccess(
+                    persisted,
+                    "Fonte pronta • WAV float32 estéreo/44,1 kHz • " +
+                        "%.1fs".format(result.durationSeconds),
+                )
+            } catch (cancelled: CancellationException) {
+                finishCancelledIfRunning("Preparação da fonte cancelada; temporários removidos.")
+            } catch (error: Exception) {
+                finishError(persisted, error.message ?: "Falha inesperada ao preparar a fonte.")
             } finally {
                 finishForegroundJob()
             }
@@ -312,6 +381,7 @@ class MediaProcessingService : Service() {
     private fun cancelCurrent(message: String) {
         val current = store.load()
         if (current != null && SeparationResultFiles.isDemucsType(current.type)) DemucsNative.cancel()
+        if (current?.type == SOURCE_PREPARE_TYPE) OnlineSourcePreparer.cancel(current.id)
         if (current != null && current.state == "RUNNING") {
             val cancelling = current.copy(
                 state = "CANCELLING",
@@ -360,6 +430,7 @@ class MediaProcessingService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) {
         val current = store.load()
         if (current != null && SeparationResultFiles.isDemucsType(current.type)) DemucsNative.cancel()
+        if (current?.type == SOURCE_PREPARE_TYPE) OnlineSourcePreparer.cancel(current.id)
         if (current != null) {
             store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
         }
@@ -405,6 +476,9 @@ class MediaProcessingService : Service() {
 
     override fun onDestroy() {
         if (::store.isInitialized && store.load()?.let { SeparationResultFiles.isDemucsType(it.type) } == true) DemucsNative.cancel()
+        if (::store.isInitialized) {
+            store.load()?.takeIf { it.type == SOURCE_PREPARE_TYPE }?.let { OnlineSourcePreparer.cancel(it.id) }
+        }
         activeJob?.cancel()
         releaseWakeLock()
         scope.cancel()
@@ -417,6 +491,7 @@ class MediaProcessingService : Service() {
         const val ACTION_SELF_TEST = "com.gbw.android.action.BACKGROUND_SELF_TEST"
         const val ACTION_CANCEL = "com.gbw.android.action.CANCEL_MEDIA_JOB"
         const val ACTION_FILE_PITCH = "com.gbw.android.action.FILE_PITCH"
+        const val ACTION_SOURCE_PREPARE = "com.gbw.android.action.SOURCE_PREPARE"
         const val ACTION_DEMUCS = "com.gbw.android.action.DEMUCS"
 
         private const val EXTRA_INPUT_URI = "input_uri"
@@ -426,6 +501,13 @@ class MediaProcessingService : Service() {
         private const val EXTRA_OUTPUT_FORMAT = "output_format"
         private const val EXTRA_CAUTION_ACCEPTED = "caution_accepted"
         private const val EXTRA_JOB_ID = "job_id"
+        private const val EXTRA_SOURCE_URL = "source_url"
+        private const val EXTRA_SOURCE_PROVIDER = "source_provider"
+        private const val EXTRA_SOURCE_FORMAT_ID = "source_format_id"
+        private const val EXTRA_SOURCE_DURATION = "source_duration"
+        private const val EXTRA_SOURCE_TITLE = "source_title"
+
+        const val SOURCE_PREPARE_TYPE = "source-prepare"
 
         private const val TAG = "GBW-MediaProcessing"
         private const val CHANNEL_ID = "gbw_media_processing"
@@ -449,6 +531,23 @@ class MediaProcessingService : Service() {
             .putExtra(EXTRA_AUDIO_KIND, audioKind.name)
             .putExtra(EXTRA_OUTPUT_FORMAT, outputFormat.name)
             .putExtra(EXTRA_CAUTION_ACCEPTED, cautionAccepted)
+            .putExtra(EXTRA_JOB_ID, jobId)
+
+        fun sourcePrepareIntent(
+            context: Context,
+            url: String,
+            provider: SourceProvider,
+            formatId: String = "",
+            expectedDurationSeconds: Double = 0.0,
+            title: String = "",
+            jobId: String = UUID.randomUUID().toString(),
+        ): Intent = Intent(context, MediaProcessingService::class.java)
+            .setAction(ACTION_SOURCE_PREPARE)
+            .putExtra(EXTRA_SOURCE_URL, url)
+            .putExtra(EXTRA_SOURCE_PROVIDER, provider.name)
+            .putExtra(EXTRA_SOURCE_FORMAT_ID, formatId)
+            .putExtra(EXTRA_SOURCE_DURATION, expectedDurationSeconds)
+            .putExtra(EXTRA_SOURCE_TITLE, title)
             .putExtra(EXTRA_JOB_ID, jobId)
 
         fun demucsIntent(

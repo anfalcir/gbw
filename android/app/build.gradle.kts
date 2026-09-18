@@ -12,8 +12,8 @@ android {
         applicationId = "com.gbw.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 14
-        versionName = "6.0.0-alpha10.1"
+        versionCode = 15
+        versionName = "6.0.0-alpha10.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -82,6 +82,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
 
     // Audio-only maintained FFmpegKit fork. Pinned; no dynamic versions.
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:8.1.7")

@@ -1,5 +1,6 @@
 package com.gbw.android.source
 
+import android.content.Context
 import com.gbw.android.domain.RankedSourceCandidate
 import com.gbw.android.domain.SourceCandidateDraft
 import com.gbw.android.domain.SourceProvider
@@ -24,8 +25,16 @@ data class SourceDiscoveryResult(
  * going offline never destroys the whole search experience.
  */
 class SourceSearchCoordinator(
-    private val providers: List<SourceSearchProviderClient> = listOf(BandcampDiscoveryProvider(), AppleMusicDiscoveryProvider()),
+    private val providers: List<SourceSearchProviderClient>,
 ) {
+    constructor(context: Context) : this(
+        listOf(
+            BandcampDiscoveryProvider(),
+            YtDlpDiscoveryProvider(context.applicationContext),
+            AppleMusicDiscoveryProvider(),
+        ),
+    )
+
     suspend fun search(request: SourceSearchRequest): SourceDiscoveryResult {
         require(request.song.isNotBlank()) { "Informe o nome da música." }
 

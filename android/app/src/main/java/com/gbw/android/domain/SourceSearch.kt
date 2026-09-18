@@ -35,6 +35,7 @@ data class SourceCandidateDraft(
     val durationSeconds: Double = 0.0,
     val previewOnly: Boolean = false,
     val officialSignal: Boolean = false,
+    val automaticDownloadSupported: Boolean = true,
 )
 
 data class SourceSearchLink(
@@ -71,6 +72,7 @@ data class RankedSourceCandidate(
     val official: Boolean,
     val score: Int,
     val reason: String,
+    val automaticDownloadSupported: Boolean = true,
 )
 
 interface SourceSearchProviderClient {
@@ -276,6 +278,7 @@ object SourceSearchRules {
             official = official,
             score = (if (draft.previewOnly) min(score, 5) else score).coerceIn(0, 100),
             reason = reasons.joinToString(", ").ifBlank { "melhor resultado encontrado" },
+            automaticDownloadSupported = draft.automaticDownloadSupported,
         )
     }
 

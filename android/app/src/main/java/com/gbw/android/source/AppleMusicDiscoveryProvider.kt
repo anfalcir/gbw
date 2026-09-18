@@ -98,6 +98,7 @@ internal object AppleMusicSearchParser {
                 qualityBonus = 22,
                 durationSeconds = millis / 1000.0,
                 officialSignal = true,
+                automaticDownloadSupported = false,
             )
         }
         return out

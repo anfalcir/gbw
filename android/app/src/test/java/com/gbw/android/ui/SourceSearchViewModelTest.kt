@@ -53,5 +53,28 @@ class SourceSearchViewModelTest {
         assertFalse(vm.searching)
         assertEquals(1, vm.results.size)
         assertTrue(vm.message.orEmpty().contains("1 resultado"))
+        assertEquals("", vm.selectedUrl)
+    }
+
+    @Test
+    fun `downloadable safe result is preselected like Linux workflow`() {
+        val vm = SourceSearchViewModel(SavedStateHandle())
+        val ranked = SourceSearchRules.rank(
+            SourceSearchRequest("Wolves At The Gate", "Enemy"),
+            listOf(
+                SourceCandidateDraft(
+                    provider = SourceProvider.YOUTUBE,
+                    title = "Enemy",
+                    uploader = "Wolves At The Gate",
+                    url = "https://youtube.test/enemy",
+                    durationSeconds = 197.0,
+                    automaticDownloadSupported = true,
+                ),
+            ),
+        )
+
+        vm.completeSearch(SourceDiscoveryResult(ranked))
+        assertEquals("https://youtube.test/enemy", vm.selectedUrl)
+        assertEquals("https://youtube.test/enemy", vm.selectedCandidate()?.url)
     }
 }

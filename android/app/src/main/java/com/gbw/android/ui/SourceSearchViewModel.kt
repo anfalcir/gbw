@@ -17,6 +17,7 @@ internal class SourceSearchViewModel(
         private const val KEY_SONG = "source.search.song"
         private const val KEY_DEPTH = "source.search.depth"
         private const val KEY_MANUAL_URL = "source.search.manualUrl"
+        private const val KEY_SELECTED_URL = "source.search.selectedUrl"
     }
 
     var artist by mutableStateOf(savedStateHandle[KEY_ARTIST] ?: "")
@@ -28,6 +29,8 @@ internal class SourceSearchViewModel(
     )
         private set
     var manualUrl by mutableStateOf(savedStateHandle[KEY_MANUAL_URL] ?: "")
+        private set
+    var selectedUrl by mutableStateOf(savedStateHandle[KEY_SELECTED_URL] ?: "")
         private set
 
     var searching by mutableStateOf(false)
@@ -61,6 +64,23 @@ internal class SourceSearchViewModel(
         message = value
     }
 
+    fun selectCandidate(candidate: RankedSourceCandidate) {
+        if (candidate.previewOnly) {
+            message = "Esse resultado é apenas um trecho curto e não pode ser usado."
+            return
+        }
+        selectedUrl = candidate.url
+        savedStateHandle[KEY_SELECTED_URL] = candidate.url
+        message = if (candidate.automaticDownloadSupported) {
+            "Fonte selecionada: ${candidate.provider.publicLabel}. Pronta para preparação automática."
+        } else {
+            "Fonte de catálogo selecionada. Escolha um resultado com download automático ou use URL manual."
+        }
+    }
+
+    fun selectedCandidate(): RankedSourceCandidate? =
+        results.firstOrNull { it.url == selectedUrl }
+
     fun beginSearch() {
         searching = true
         results = emptyList()
@@ -69,6 +89,11 @@ internal class SourceSearchViewModel(
 
     fun completeSearch(result: SourceDiscoveryResult) {
         results = result.candidates
+        val safe = result.candidates.firstOrNull { !it.previewOnly && it.automaticDownloadSupported }
+        if (safe != null && results.none { it.url == selectedUrl && !it.previewOnly }) {
+            selectedUrl = safe.url
+            savedStateHandle[KEY_SELECTED_URL] = safe.url
+        }
         message = when {
             result.candidates.isEmpty() && result.warnings.isNotEmpty() ->
                 "Nenhuma fonte direta encontrada. " + result.warnings.joinToString(" ")
