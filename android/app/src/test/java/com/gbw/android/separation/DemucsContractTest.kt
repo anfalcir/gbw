@@ -22,6 +22,7 @@ class DemucsContractTest {
         )
         assertEquals(6, DemucsModelContract.stemNames.distinct().size)
         assertFalse(DemucsModelContract.RUNTIME_COMMIT.isBlank())
+        assertEquals(DemucsChunking.WINDOW_FRAMES, DemucsNative.MODEL_WINDOW_FRAMES)
     }
 
     @Test

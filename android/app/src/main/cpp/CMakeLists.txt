@@ -109,7 +109,8 @@ target_compile_features(gbw_demucs PRIVATE cxx_std_17)
 target_compile_options(
     gbw_demucs
     PRIVATE
-    -O2
+    -O3
+    -DNDEBUG
     -Wall
     -Wextra
     -Wno-unused-parameter

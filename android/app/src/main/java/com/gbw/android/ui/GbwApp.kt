@@ -44,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +73,12 @@ import com.gbw.android.domain.SeparationMode
 import com.gbw.android.domain.Tunings
 import com.gbw.android.separation.BsRoformerContract
 import com.gbw.android.separation.BsRoformerModelManager
+import com.gbw.android.separation.DemucsRuntimeMonitor
+import com.gbw.android.separation.SeparationResultFiles
+import com.gbw.android.separation.SeparationResultStore
+import com.gbw.android.separation.SeparationStemExporter
+import com.gbw.android.separation.StemPreviewPlayer
+import com.gbw.android.separation.ValidatedSeparationResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -220,6 +227,44 @@ private fun SourceScreen(
     var inspectionError by remember { mutableStateOf<String?>(null) }
     var inspecting by remember { mutableStateOf(false) }
 
+    DisposableEffect(previewPlayer) {
+        onDispose { previewPlayer.release() }
+    }
+
+    val exportPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+            val result = availableResult
+            if (treeUri != null && result != null && !exportBusy) {
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                } catch (_: Exception) {
+                }
+                exportBusy = true
+                exportMessage = "Exportando os 6 stems…"
+                scope.launch {
+                    try {
+                        val summary = SeparationStemExporter.exportAll(
+                            context = context,
+                            result = result,
+                            treeUri = treeUri,
+                        ) { completed, total, stem ->
+                            exportMessage = "Exportando $completed/$total • ${stemPublicLabel(stem)}…"
+                        }
+                        exportMessage =
+                            "Exportação concluída: ${summary.fileNames.size} WAVs • " +
+                                formatStemBytes(summary.totalBytes) + "."
+                    } catch (error: Exception) {
+                        exportMessage = error.message ?: "Falha ao exportar os stems."
+                    } finally {
+                        exportBusy = false
+                    }
+                }
+            }
+        }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             try {
@@ -314,6 +359,13 @@ private fun SeparationScreen(
 ) {
     val context = LocalContext.current
     val jobStore = remember(context) { JobStore(context) }
+    val resultStore = remember(context) { SeparationResultStore(context) }
+    val previewPlayer = remember { StemPreviewPlayer() }
+    val scope = rememberCoroutineScope()
+    var availableResult by remember { mutableStateOf<ValidatedSeparationResult?>(null) }
+    var playingStem by remember { mutableStateOf<String?>(null) }
+    var exportBusy by remember { mutableStateOf(false) }
+    var exportMessage by remember { mutableStateOf<String?>(null) }
     var mode by rememberSaveable { mutableStateOf(SeparationMode.androidDefault.name) }
     var uriText by rememberSaveable(initialUriText) { mutableStateOf(initialUriText) }
     var technicalOpen by rememberSaveable { mutableStateOf(false) }
@@ -359,6 +411,29 @@ private fun SeparationScreen(
     LaunchedEffect(Unit) {
         while (isActive) {
             jobState = jobStore.loadReconciled()
+            val storedRecord = resultStore.load()
+            if (storedRecord?.jobId != availableResult?.record?.jobId) {
+                availableResult = storedRecord?.let {
+                    SeparationResultFiles.validate(context.filesDir, it)
+                }
+            }
+            if (availableResult == null) {
+                availableResult = jobState
+                    ?.takeIf {
+                        it.state != "RUNNING" &&
+                            it.state != "CANCELLING" &&
+                            (it.type == "separation-quick" ||
+                                it.type == "separation-high-quality")
+                    }
+                    ?.let {
+                        resultStore.recoverExisting(
+                            jobId = it.id,
+                            type = it.type,
+                            startedAt = it.startedAt,
+                            message = it.message,
+                        )
+                    }
+            }
             modelCandidatePresent =
                 BsRoformerModelManager.candidateLooksInstalled(context)
             delay(500)
@@ -598,11 +673,125 @@ private fun SeparationScreen(
             }
         }
 
+        availableResult?.let { result ->
+            SeparationResultsCard(
+                result = result,
+                appJobBusy = appJobBusy,
+                playingStem = playingStem,
+                exportBusy = exportBusy,
+                exportMessage = exportMessage,
+                onTogglePreview = { stem ->
+                    if (playingStem == stem.name) {
+                        previewPlayer.stop()
+                        playingStem = null
+                    } else if (!appJobBusy) {
+                        previewPlayer.play(
+                            file = stem.file,
+                            onFinished = {
+                                if (playingStem == stem.name) playingStem = null
+                            },
+                            onError = { message ->
+                                if (playingStem == stem.name) playingStem = null
+                                exportMessage = message
+                            },
+                        )
+                        playingStem = stem.name
+                    }
+                },
+                onExport = { exportPicker.launch(null) },
+            )
+        }
+
         resultMessage?.let {
             Text(it, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
+
+@Composable
+private fun SeparationResultsCard(
+    result: ValidatedSeparationResult,
+    appJobBusy: Boolean,
+    playingStem: String?,
+    exportBusy: Boolean,
+    exportMessage: String?,
+    onTogglePreview: (com.gbw.android.separation.SeparationStem) -> Unit,
+    onExport: () -> Unit,
+) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Stems disponíveis", fontWeight = FontWeight.SemiBold)
+            val mode =
+                if (result.record.type == "separation-quick") "Separação Rápida"
+                else "Alta qualidade"
+            val durationSeconds = result.record.frames / 44_100.0
+            Text(
+                "$mode • 6 WAV float32 • 44,1 kHz • ${"%.1f".format(durationSeconds)} s • " +
+                    formatStemBytes(result.totalBytes),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (result.record.chunkCount > 0) {
+                Text(
+                    "Motor Android otimizado • ${result.record.chunkCount} trechos • " +
+                        "mediana ${"%.1f".format(result.record.medianChunkMillis / 1_000.0)} s • " +
+                        "máx ${"%.1f".format(result.record.maxChunkMillis / 1_000.0)} s • " +
+                        "térmico ${DemucsRuntimeMonitor.thermalLabel(result.record.maxThermalStatus)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            result.stems.forEach { stem ->
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stemPublicLabel(stem.name), fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "${stem.file.name} • ${formatStemBytes(stem.file.length())}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { onTogglePreview(stem) },
+                        enabled = !appJobBusy && !exportBusy,
+                    ) {
+                        Text(if (playingStem == stem.name) "Parar" else "Ouvir")
+                    }
+                }
+            }
+            Button(onClick = onExport, enabled = !appJobBusy && !exportBusy) {
+                Text(if (exportBusy) "Exportando…" else "Exportar os 6 stems…")
+            }
+            Text(
+                "A exportação usa o seletor de pastas do Android e cria seis WAVs " +
+                    "GBW_Quick/HQ_<job>_<stem>.wav. Os arquivos internos continuam preservados.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            exportMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        }
+    }
+}
+
+private fun stemPublicLabel(name: String): String = when (name) {
+    "drums" -> "Bateria"
+    "bass" -> "Baixo"
+    "other" -> "Outros"
+    "vocals" -> "Vocais"
+    "guitar" -> "Guitarra"
+    "piano" -> "Piano"
+    else -> name
+}
+
+private fun formatStemBytes(bytes: Long): String =
+    if (bytes >= 1024L * 1024L) {
+        "%.1f MiB".format(bytes.toDouble() / (1024.0 * 1024.0))
+    } else {
+        "%.1f KiB".format(bytes.toDouble() / 1024.0)
+    }
 
 @Composable
 private fun FilePitchScreen() {

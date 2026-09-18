@@ -25,6 +25,8 @@ import com.gbw.android.separation.BsRoformerModelManager
 import com.gbw.android.separation.BsRoformerSeparator
 import com.gbw.android.separation.DemucsNative
 import com.gbw.android.separation.DemucsSeparator
+import com.gbw.android.separation.DemucsRuntimeMonitor
+import com.gbw.android.separation.SeparationResultStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,10 +43,12 @@ class MediaProcessingService : Service() {
     private var activeJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var store: JobStore
+    private lateinit var separationResults: SeparationResultStore
 
     override fun onCreate() {
         super.onCreate()
         store = JobStore(this)
+        separationResults = SeparationResultStore(this)
         ensureChannel()
     }
 
@@ -196,9 +200,17 @@ class MediaProcessingService : Service() {
                     inputUri = input,
                     jobId = persisted.id,
                 ) { progress, message -> updateJob(persisted, progress, message) }
+                separationResults.saveQuick(persisted.id, result)
                 val elapsedSeconds = result.elapsedMillis / 1_000L
                 val peakMiB = result.peakObservedPssKb / 1_024L
-                val message = "Concluído • 6 stems • 44,1 kHz • ${elapsedSeconds}s • PSS observado ${peakMiB} MiB"
+                val medianSeconds = result.medianChunkMillis / 1_000.0
+                val maxSeconds = result.maxChunkMillis / 1_000.0
+                val thermal = DemucsRuntimeMonitor.thermalLabel(result.maxThermalStatus)
+                val message =
+                    "Concluído • 6 stems • 44,1 kHz • ${elapsedSeconds}s • " +
+                        "PSS observado ${peakMiB} MiB • ${result.chunkCount} trechos • " +
+                        "mediana ${"%.1f".format(medianSeconds)}s • máx ${"%.1f".format(maxSeconds)}s • " +
+                        "térmico $thermal"
                 finishSuccess(persisted, message)
             } catch (cancelled: CancellationException) {
                 finishCancelledIfRunning("Separação cancelada; stems parciais removidos.")
@@ -247,6 +259,7 @@ class MediaProcessingService : Service() {
                     jobId = persisted.id,
                 ) { progress, message -> updateJob(persisted, progress, message) }
                 val elapsedSeconds = result.elapsedMillis / 1_000L
+                separationResults.saveHighQuality(persisted.id, result)
                 val peakMiB = result.peakObservedPssKb / 1_024L
                 finishSuccess(
                     persisted,

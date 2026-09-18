@@ -12,8 +12,8 @@ android {
         applicationId = "com.gbw.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 7
-        versionName = "6.0.0-alpha7"
+        versionCode = 8
+        versionName = "6.0.0-alpha8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

@@ -22,6 +22,10 @@ internal data class DemucsSeparationResult(
     val peakObservedPssKb: Long,
     val runtimeIdentity: String,
     val modelSha256: String,
+    val chunkCount: Int,
+    val medianChunkMillis: Long,
+    val maxChunkMillis: Long,
+    val maxThermalStatus: Int,
 )
 
 internal object DemucsSeparator {
@@ -61,6 +65,9 @@ internal object DemucsSeparator {
         var success = false
         val startedAt = System.nanoTime()
         var peakPssKb = Debug.getPss()
+        val runtimeMonitor = DemucsRuntimeMonitor(context)
+        val chunkMillis = mutableListOf<Long>()
+        runtimeMonitor.start()
 
         try {
             WorkerExitDiagnostics.markPhase(context, "demucs:model-check")
@@ -118,6 +125,7 @@ internal object DemucsSeparator {
                         context,
                         "demucs:infer:${plan.index + 1}/${plans.size}",
                     )
+                    val chunkStartedAt = System.nanoTime()
                     val nativeOutput = DemucsNative.separateChunk(
                         handle = modelHandle,
                         interleavedStereo = inputWindow,
@@ -128,6 +136,8 @@ internal object DemucsSeparator {
                             report(progress, "Separando trecho ${plan.index + 1}/${plans.size}…")
                         },
                     )
+                    chunkMillis += (System.nanoTime() - chunkStartedAt) / 1_000_000L
+                    runtimeMonitor.sampleNow()
                     currentCoroutineContext().ensureActive()
 
                     val samplesPerSourceWindow =
@@ -167,7 +177,13 @@ internal object DemucsSeparator {
             }
 
             val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000L
-            peakPssKb = maxOf(peakPssKb, Debug.getPss())
+            val runtimeMetrics = runtimeMonitor.snapshot()
+            peakPssKb = maxOf(peakPssKb, runtimeMetrics.peakPssKb)
+            val orderedChunkMillis = chunkMillis.sorted()
+            val medianChunkMillis =
+                if (orderedChunkMillis.isEmpty()) 0L
+                else orderedChunkMillis[orderedChunkMillis.size / 2]
+            val maxChunkMillis = chunkMillis.maxOrNull() ?: 0L
             report(100, "Separação Rápida concluída: 6 stems validados.")
             WorkerExitDiagnostics.markPhase(context, "demucs:complete")
             success = true
@@ -179,8 +195,13 @@ internal object DemucsSeparator {
                 peakObservedPssKb = peakPssKb,
                 runtimeIdentity = runtimeIdentity,
                 modelSha256 = DemucsModelContract.SHA256,
+                chunkCount = plans.size,
+                medianChunkMillis = medianChunkMillis,
+                maxChunkMillis = maxChunkMillis,
+                maxThermalStatus = runtimeMetrics.maxThermalStatus,
             )
         } finally {
+            runtimeMonitor.stop()
             openWriters.forEach { writer -> runCatching { writer.close() } }
             if (modelHandle != 0L) DemucsNative.destroyModel(modelHandle)
             preparedInput.delete()

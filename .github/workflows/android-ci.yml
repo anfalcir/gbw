@@ -106,6 +106,10 @@ jobs:
           echo "APK_NATIVE_DEMUCS_OK"
           echo "APK_NATIVE_BSROFORMER_SPECTRAL_OK"
 
+      - name: Verify optimized Demucs runtime
+        working-directory: android
+        run: python3 scripts/verify_demucs_runtime.py app/build/outputs/apk/debug/app-debug.apk
+
       - name: Verify FFmpegKit Java runtime classes
         working-directory: android
         run: python3 scripts/verify_apk_java_runtime.py app/build/outputs/apk/debug/app-debug.apk
