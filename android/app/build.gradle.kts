@@ -12,8 +12,8 @@ android {
         applicationId = "com.gbw.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 9
-        versionName = "6.0.0-alpha9"
+        versionCode = 10
+        versionName = "6.0.0-alpha9.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -23,7 +23,20 @@ android {
         }
     }
 
+    signingConfigs {
+        create("homologation") {
+            storeFile = file("gbw-homologation.p12")
+            storePassword = "gbw-homologation"
+            keyAlias = "gbw-homologation"
+            keyPassword = "gbw-homologation"
+            storeType = "PKCS12"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("homologation")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

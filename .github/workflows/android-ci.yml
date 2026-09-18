@@ -96,6 +96,25 @@ jobs:
         working-directory: android
         run: gradle --no-daemon --stacktrace assembleDebug
 
+      - name: Verify stable homologation signing certificate
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          EXPECTED="6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0"
+          APKSIGNER="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -x "$APKSIGNER"
+          OUTPUT="$("$APKSIGNER" verify --print-certs "$APK")"
+          printf '%s\n' "$OUTPUT"
+          ACTUAL="$(printf '%s\n' "$OUTPUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test -n "$ACTUAL"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "Unexpected APK signing certificate: $ACTUAL" >&2
+            exit 1
+          fi
+          echo "APK_HOMOLOGATION_SIGNING_OK=$ACTUAL"
+
       - name: Verify native APK contents
         working-directory: android
         shell: bash
@@ -171,6 +190,8 @@ jobs:
             echo "demucs_model_bytes=54855129"
             echo "demucs_model_sha256=09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856"
             echo "android_abi=arm64-v8a"
+            echo "signing_profile=homologation-public-test-key"
+            echo "signing_certificate_sha256=6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0"
           } > app/build/outputs/apk/debug/build-info.txt
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           {
@@ -186,6 +207,7 @@ jobs:
             echo "- Demucs model: `htdemucs_6s @ 5f5daffffcf06ad7b27a7285da327e18ea62068a`"
             echo "- Demucs model SHA-256: `09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856`"
             echo "- Native ABI: `arm64-v8a`"
+            echo "- Homologation signing cert SHA-256: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`"
             echo "- Artifact: `GBW-Android-debug-${GITHUB_RUN_NUMBER}`"
           } >> "$GITHUB_STEP_SUMMARY"
 
