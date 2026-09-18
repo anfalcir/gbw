@@ -1,76 +1,64 @@
 # GBW Android — Plano Mestre de Migração
 
-**Baseline congelado:** GBW Linux 5.23.0  
-**Plataforma-alvo:** Android 6.x  
-**Branch:** `dev/android-6.0`
+Baseline congelado: GBW Linux 5.23.0  
+Branch Android: `dev/android-6.0`
 
 ## Princípios
 
-1. `linux/` permanece imutável durante a migração Android.
-2. Android é uma reimplementação nativa Kotlin/Compose + NDK/JNI quando necessário.
-3. Processamento pesado não pertence à Activity.
-4. Qualidade e estabilidade têm prioridade sobre velocidade.
-5. Toda otimização precisa de A/B reproduzível.
-6. No Android, Separação usa exclusivamente Demucs `htdemucs_6s`.
-7. Modelos grandes permanecem fora do APK e são validados antes do uso.
-8. Projetos/backups devem ser interoperáveis com o Linux no que for comum às plataformas.
+1. Não modificar `linux/` durante trabalho Android.
+2. Android nativo Kotlin/Compose + NDK/JNI.
+3. Processamento pesado fora da Activity.
+4. Qualidade/estabilidade antes de velocidade.
+5. Uma variável por benchmark.
+6. Separação Android somente com Demucs `htdemucs_6s`.
+7. Modelos grandes fora do APK e validados.
+8. Interoperabilidade Linux/Android no escopo funcional comum.
 
-## Arquitetura
-
-```text
-UI Compose
-→ domínio/workflow
-→ Foreground Service :media
-→ FFmpeg / Rubber Band / Demucs
-→ estado persistido
-→ SAF
-```
-
-## Macroetapas
+## Roadmap
 
 ### M0 — Baseline e CI
 Concluído.
 
-### M1 — Shell, domínio e navegação
-Concluído digitalmente e validado fisicamente nas telas principais.
+### M1 — Shell/domínio/navegação
+Concluído.
 
-### M2 — Fonte / SAF / inspeção
-Concluído digitalmente; fluxos reais já usados em homologação.
+### M2 — Fonte/SAF/inspeção
+Concluído no escopo atual.
 
-### M3 — Background e lifecycle
-Implementado com processo dedicado, estado persistido, cancelamento e recuperação. Continuar regressão física em execuções longas.
+### M3 — Background/lifecycle
+Implementado; manter regressão física.
 
 ### M4 — Pitch de Arquivo
-Implementado com Rubber Band R3. Homologação auditiva/física final ainda necessária antes do RC.
+Implementado; fechamento físico/auditivo antes do RC.
 
 ### M5 — Separação Demucs
-Implementação e áudio real aprovados. Alpha9.1 é baseline físico atual.
+Concluído e auditivamente homologado.
 
-### M6 — Performance e UX da Separação
+### M6 — Performance/UX
 Em andamento.
+
+Resultados:
 - alpha8: 2165 s / 2180 MiB;
-- alpha9.1 2t: 1977 s / 1714 MiB, áudio aprovado;
-- alpha9.2-4t: candidato A/B, CI #85 verde.
-Concluir escolha 2t vs 4t antes de alterar chunking.
+- alpha9.1 2t: 1977 s / 1714 MiB — baseline;
+- alpha9.2 4t: 2460 s / 1698 MiB — rejeitado;
+- alpha9.3 1t: CI #86 verde — aguardando A/B físico.
+
+Fechar 1t vs 2t antes de alterar chunking ou outra classe de otimização.
 
 ### M7 — Workflow completo
-Fonte → Separação → Afinação/Pitch → Exportação. Pendente de consolidação ponta a ponta.
+Fonte → Separação → Afinação/Pitch → Exportação.
 
-### M8 — Exportação final / shared gain
+### M8 — Exportação final/shared gain
 Pendente.
 
-### M9 — Projetos / backup / restore
+### M9 — Projetos/backup/restore
 Pendente.
 
 ### M10 — Hardening
-Stress, lifecycle, pouco espaço, cancelamento, arquivos inválidos, recuperação e long runs.
+Stress, lifecycle, armazenamento, cancelamento, arquivos inválidos, long runs.
 
 ### M11 — Release engineering
-Licenças, chave de produção privada, release build, documentação e RC.
+Licenças, chave privada de produção, release build e RC.
 
-### M12 — GBW Android 6.0.0
-Homologação física final e release.
-
-## Gate atual
-
-Instalar `6.0.0-alpha9.2-4t` sobre alpha9.1 e repetir a mesma música. Avaliar lado a lado tempo, PSS, mediana, máximo, térmico e áudio. Manter 4 threads apenas se superar o baseline sem regressões relevantes.
+### M12 — 6.0.0 final
+Homologação final e release.
