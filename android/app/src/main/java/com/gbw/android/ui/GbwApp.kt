@@ -227,44 +227,6 @@ private fun SourceScreen(
     var inspectionError by remember { mutableStateOf<String?>(null) }
     var inspecting by remember { mutableStateOf(false) }
 
-    DisposableEffect(previewPlayer) {
-        onDispose { previewPlayer.release() }
-    }
-
-    val exportPicker =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
-            val result = availableResult
-            if (treeUri != null && result != null && !exportBusy) {
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        treeUri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                    )
-                } catch (_: Exception) {
-                }
-                exportBusy = true
-                exportMessage = "Exportando os 6 stems…"
-                scope.launch {
-                    try {
-                        val summary = SeparationStemExporter.exportAll(
-                            context = context,
-                            result = result,
-                            treeUri = treeUri,
-                        ) { completed, total, stem ->
-                            exportMessage = "Exportando $completed/$total • ${stemPublicLabel(stem)}…"
-                        }
-                        exportMessage =
-                            "Exportação concluída: ${summary.fileNames.size} WAVs • " +
-                                formatStemBytes(summary.totalBytes) + "."
-                    } catch (error: Exception) {
-                        exportMessage = error.message ?: "Falha ao exportar os stems."
-                    } finally {
-                        exportBusy = false
-                    }
-                }
-            }
-        }
-
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             try {
@@ -375,6 +337,44 @@ private fun SeparationScreen(
         mutableStateOf(BsRoformerModelManager.candidateLooksInstalled(context))
     }
 
+    DisposableEffect(previewPlayer) {
+        onDispose { previewPlayer.release() }
+    }
+
+    val exportPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+            val result = availableResult
+            if (treeUri != null && result != null && !exportBusy) {
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                } catch (_: Exception) {
+                }
+                exportBusy = true
+                exportMessage = "Exportando os 6 stems…"
+                scope.launch {
+                    try {
+                        val summary = SeparationStemExporter.exportAll(
+                            context = context,
+                            result = result,
+                            treeUri = treeUri,
+                        ) { completed, total, stem ->
+                            exportMessage = "Exportando $completed/$total • ${stemPublicLabel(stem)}…"
+                        }
+                        exportMessage =
+                            "Exportação concluída: ${summary.fileNames.size} WAVs • " +
+                                formatStemBytes(summary.totalBytes) + "."
+                    } catch (error: Exception) {
+                        exportMessage = error.message ?: "Falha ao exportar os stems."
+                    } finally {
+                        exportBusy = false
+                    }
+                }
+            }
+        }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             try {
@@ -420,8 +420,7 @@ private fun SeparationScreen(
             if (availableResult == null) {
                 availableResult = jobState
                     ?.takeIf {
-                        it.state != "RUNNING" &&
-                            it.state != "CANCELLING" &&
+                        it.state == "SUCCESS" &&
                             (it.type == "separation-quick" ||
                                 it.type == "separation-high-quality")
                     }
