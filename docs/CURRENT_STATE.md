@@ -1,117 +1,77 @@
 # GBW — Estado Atual
 
-**Data:** 2026-09-18  
-**Repositório:** `anfalcir/gbw`  
-**Branch Android:** `dev/android-6.0`
+Data: 2026-09-18
+Repository: anfalcir/gbw
+Branch Android: dev/android-6.0
+Baseline Linux: linux/ = GBW Linux 5.23.0, congelado/somente leitura.
 
-## Regras de preservação
+## Candidato Android
+Version: 6.0.0-alpha11
+versionCode: 16
 
-- `linux/` é o baseline congelado GBW Linux 5.23.0.
-- Trabalho Android não modifica `linux/`.
-- Separação Android usa exclusivamente Demucs `htdemucs_6s`.
-- Otimizações são medidas com uma variável por benchmark físico.
+O alpha11 fecha as bases de produto que faltavam depois do Demucs/pesquisa:
+- repositório real de projetos com UUID imutável;
+- managed source autocontida e migração idempotente dos alphas;
+- stems publicados por projectId somente depois de validação;
+- Afinação/Pitch vinculada ao projeto;
+- export final backing + guitar com shared gain do Linux 5.23;
+- WAV float32, WAV24 e FLAC24;
+- export_manifest.json para interoperabilidade futura com GuitarLab;
+- SAF backup manual/automático, destination probe e persistable tree URI;
+- SHA-256 inventory e revisionId determinístico;
+- incremental content reuse e retenção sem histórico;
+- commit marker por último, direct-URI verification e settling lookup;
+- WorkManager unique/coalesced;
+- remote discovery/import/reconciliation/conflict;
+- local-only delete tombstone;
+- correção do HTTP 403 do download YouTube observado na homologação física.
 
-## Checkpoint consolidado — Android 6.0.0-alpha10.1
+## Homologação da pesquisa
+O vídeo físico de 2026-09-18 confirmou que descoberta e ranking funcionaram e escolheram candidatos coerentes, mas a preparação do candidato YouTube terminou com:
+ERROR: unable to download video data: HTTP Error 403: Forbidden
 
-- versionCode: `14`
-- commit funcional: `0636575a85f163e6b79a0f6400993484d03b6d36`
-- Android CI: **#94 / run 35392234622 — SUCCESS**
-- APK: `55,617,794` bytes
-- SHA-256: `cd865e34d35e61a5a27706f01a6c771dccb65dedfe8172369c2c54112cdd699a`
-- certificado de homologação SHA-256: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
+O alpha11 corrige a camada de aquisição sem mudar o ranking:
+- re-inspeção do formato no momento do download;
+- atualização yt-dlp NIGHTLY pela API suportada do youtubedl-android;
+- retries limitados e diretório limpo por tentativa;
+- fallback de player_client isolado: fresh/default, android_vr e web_embedded;
+- classificação específica de 403/Forbidden/PO-token/SABR/signature/formato;
+- cancelamento cobre todos os processIds de retry.
 
-O alpha10.1 consolida:
-- Demucs-only;
-- BLAS default 1 thread;
-- política interna suportada 1/2 threads;
-- 4 threads removido da política Kotlin e do gate JNI;
-- UX de nome amigável do arquivo SAF;
-- mensagem de início de separação transitória;
-- tela Sistema mostrando threads reais;
-- correção de cancelamento nativo em timeout;
-- Pesquisa Online de Fontes com ranking portado do Linux 5.23;
-- Bandcamp discovery provider;
-- Apple Music/iTunes Search API como segundo provider de catálogo;
-- busca ampla por links para YouTube/SoundCloud/Bandcamp;
-- estado da pesquisa persistido em ViewModel + SavedStateHandle para sobreviver a rotação;
-- URL manual;
-- isolamento de falha entre providers.
+## Export contract
+Backing = drums + bass + other + vocals + piano.
+Guitar permanece separada.
+O pico é medido em backing + guitar recombinados; target -1 dBFS; um único fator é aplicado igualmente aos dois arquivos. Normalização independente é proibida.
 
-## Benchmark físico de threads — Samsung Galaxy Tab A11+
+## Backup contract
+projectId é a identidade local e remota. Rename preserva ID; duplicate gera novo ID.
+Backup contém project metadata + managed source + seis stems + exports.
+revisionId é forte/determinístico e serve para dedupe/retry/conflito, não histórico.
+Somente a versão lógica corrente permanece no destino após o novo commit ser validado.
 
-Música de referência: 211,9 s, seis stems, 44,1 kHz, 39 chunks.
+## Runtime preservado
+- Demucs-only htdemucs_6s;
+- OpenBLAS 0.3.34;
+- default 1 thread; política suportada 1/2;
+- chunk concurrency 1;
+- FFmpeg;
+- Rubber Band R3 4.0.0;
+- ABI arm64-v8a;
+- sem BS-RoFormer/PTE/ExecuTorch/PFFFT.
 
-| Candidato | Threads | Tempo | PSS | Mediana | Máximo | Térmico |
-|---|---:|---:|---:|---:|---:|---|
-| alpha8 | pré-OpenBLAS | 2165 s | 2180 MiB | 53,5 s | 68,4 s | leve |
-| alpha9.1 | 2 | 1977 s | 1714 MiB | 45,9 s | 87,3 s | leve |
-| alpha9.2 | 4 | 2460 s | 1698 MiB | 58,8 s | 102,8 s | leve |
-| alpha9.3 | **1** | **1895 s** | **1712 MiB** | 48,2 s | **51,0 s** | **normal** |
+## Evidência digital
+CI #102 / run 35403458254 passou integralmente sobre a base alpha11 antes do último hardening isolado dos clientes YouTube: Unit, Lint, assemble, assinatura, conteúdo nativo, Demucs/OpenBLAS, FFmpegKit e manifest worker.
+O HEAD final deve ser promovido somente depois de repetir integralmente esses gates com o hardening/documentação consolidados.
 
-### Decisão
+## Gates físicos mínimos restantes
+1. retestar a aquisição do candidato YouTube que antes retornava 403;
+2. escolher Google Drive via SAF e confirmar permission/visibilidade;
+3. confirmar rename sem duplicação e coalescência;
+4. reinstalar/limpar app, apontar a mesma pasta e confirmar scan/import;
+5. audição final de backing/guitar.
 
-**1 thread é o default promovido.**
-
-Contra 2 threads:
-- tempo: 1977 → 1895 s = **-82 s / -4,1%**;
-- PSS: 1714 → 1712 MiB = praticamente igual;
-- mediana: 45,9 → 48,2 s = +5,0%;
-- máximo: 87,3 → 51,0 s = **-41,6%**;
-- térmico: leve → **normal**.
-
-Contra alpha8:
-- tempo: **-12,5%**;
-- PSS: **-21,5%**;
-- mediana: **-9,9%**;
-- máximo: **-25,4%**.
-
-4 threads está rejeitado. O app não o aceita mais como política válida.
-
-O teste de 1 thread terminou SUCCESS 100%, com os seis WAVs estruturais esperados. Como o usuário não registrou nesta rodada uma nova confirmação auditiva explícita dos seis stems de 1t, manter um spot-check auditivo no alpha10 como gate físico final deste bloco.
-
-## Runtime Demucs
-
-- modelo: `htdemucs_6s`
-- checkpoint: `ggml-model-htdemucs-6s-f16.bin`
-- SHA-256: `09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856`
-- demucs.cpp: `f1206e9adeea103aef4a636b9e62297cf1f8e34e`
-- Eigen: `dd8c71e62852b2fe429edb6682ac91fd1c578a26`
-- OpenBLAS 0.3.34: `e0166008be8e466242aa76b2ff75ce3f0fbf574a`
-- ABI: arm64-v8a
-- BLAS default: 1
-- política interna: 1/2
-- chunk concurrency: 1
-- window: 343.980 frames
-- core: 242.550 frames
-- contexto: 50.715 frames por lado
-
-## Pesquisa Online de Fontes
-
-Implementada no alpha10.1:
-- ranking independente de provider;
-- regras portadas do Linux 5.23;
-- Artista + Música;
-- profundidade Robusta/Máxima;
-- Bandcamp discovery provider;
-- Apple Music/iTunes Search API provider;
-- busca ampla de fallback;
-- estado preservado entre retrato/paisagem;
-- recomendado + score + motivo;
-- URL manual;
-- falha de um provider não derruba a pesquisa.
-
-Aquisição automática do áudio continua separada por design. A tela abre a fonte e o arquivo obtido por meio permitido pelo serviço entra no GBW via SAF.
-
-## Próximos gates físicos
-
-No alpha10.1:
-1. instalar por cima do alpha9.3 sem limpar dados;
-2. confirmar que o nome da fonte agora é amigável;
-3. pesquisar `Wolves At The Gate / Enemy` e confirmar resultado Apple Music e/ou Bandcamp;
-4. preencher Artista/Música, girar retrato↔paisagem e confirmar que os campos/resultados permanecem;
-5. testar URL manual;
-6. confirmar tela Sistema com BLAS 1 thread;
-7. fazer spot-check auditivo dos seis stems já gerados ou de uma nova separação;
-8. confirmar ícone de notificação.
-
-Depois disso, avançar M7: Fonte → Separação → Afinação/Pitch → Exportação.
+Documentos canônicos adicionais:
+- docs/ANDROID_PROJECT_STORAGE.md
+- docs/ANDROID_BACKUP_CONTRACT.md
+- docs/GBW_EXPORT_CONTRACT.md
+- docs/ANDROID_ONLINE_SOURCES.md
