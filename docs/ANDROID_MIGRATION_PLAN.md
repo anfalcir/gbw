@@ -23,7 +23,16 @@ Concluído.
 Concluído.
 
 ### M2 — Fonte/SAF/inspeção
-Concluído no escopo atual.
+Implementação local/SAF concluída.
+
+Pesquisa online:
+- contrato de ranking do Linux 5.23 portado para Kotlin;
+- UI artista/música + Robusta/Máxima;
+- Bandcamp discovery provider implementado;
+- URL manual implementada;
+- falhas de provider isoladas;
+- aquisição automática de mídia permanece separada e pendente por provider;
+- detalhes em `docs/ANDROID_ONLINE_SOURCES.md`.
 
 ### M3 — Background/lifecycle
 Implementado; manter regressão física.
