@@ -5,7 +5,7 @@ package com.gbw.android.separation
  * this controls only BLAS workers inside the active model inference.
  */
 internal object DemucsThreadPolicy {
-    const val DEFAULT_THREADS = 4
+    const val DEFAULT_THREADS = 1
     const val OVERRIDE_PROPERTY = "gbw.demucs.blasThreads"
     val supportedThreadCounts: Set<Int> = setOf(1, 2, 4)
 
