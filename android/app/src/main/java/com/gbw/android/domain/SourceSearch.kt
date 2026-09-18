@@ -35,7 +35,7 @@ data class SourceCandidateDraft(
     val durationSeconds: Double = 0.0,
     val previewOnly: Boolean = false,
     val officialSignal: Boolean = false,
-    val automaticDownloadSupported: Boolean = true,
+    val automaticDownloadSupported: Boolean = false,
 )
 
 data class SourceSearchLink(

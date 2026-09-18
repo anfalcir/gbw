@@ -143,6 +143,7 @@ internal object BandcampSearchParser {
             url = cleanUrl,
             quality = "Fonte direta no Bandcamp",
             qualityBonus = 30,
+            automaticDownloadSupported = true,
         )
     }
 
@@ -154,6 +155,7 @@ internal object BandcampSearchParser {
             url = url,
             quality = "Fonte direta no Bandcamp",
             qualityBonus = 30,
+            automaticDownloadSupported = true,
         )
 
     private fun titleFromUrl(url: String): String {
