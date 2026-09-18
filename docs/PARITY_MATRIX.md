@@ -2,43 +2,25 @@
 
 | Contrato | Linux 5.23 | Android | Estado |
 |---|---|---|---|
-| Drop B → Drop D | +3 st | +3 st | ✅ domínio + golden R3 |
-| Drop D → Drop B | -3 st | -3 st | ✅ domínio + golden R3 |
-| E Standard → Drop D | inválido globalmente | inválido | ✅ domínio |
-| Afinações suportadas | 18 | 18 | ✅ domínio |
-| Normalização de nomes | Title Case | equivalente | ✅ domínio |
-| Busca case/accent insensitive | sim | contrato portado | 🟡 UI/projetos pendente |
-| Opções de separação Linux | múltiplas opções históricas | — | referência congelada; manter no Linux |
-| Separação Android | — | Demucs `htdemucs_6s` como único motor | ✅ decisão consolidada; divergência intencional |
-| Ideal/Adequado/Ressalva | sim | regras portadas | ✅ domínio/UI |
-| WAV 32f / 48 kHz | Ideal | Ideal | ✅ domínio |
-| FLAC 24-bit | Adequado | Adequado | ✅ domínio |
-| MP3/AAC lossy | Ressalva | Ressalva | ✅ domínio |
-| Pitch | Rubber Band R3 | R3 v4.0.0 NDK/JNI arm64 | ✅ implementação/build/golden; 🟡 aparelho |
-| Pitch offline | duas passagens | `study` + `process` | ✅ implementação |
-| Formantes em vocal | preservar | `OptionFormantPreserved` | ✅ implementação; 🟡 auditivo |
-| Preservar duração | sim | valida + golden ≤20 ms | ✅ digital; 🟡 aparelho |
-| Preservar sample rate no Pitch | sim | sem `-ar`, valida antes/depois | ✅ pipeline |
-| Preservar canais no Pitch | sim | sem `-ac`, valida antes/depois | ✅ pipeline + golden estéreo |
-| WAV 32-bit float saída | sim | padrão | ✅ pipeline |
-| WAV 24-bit / FLAC 24-bit | sim | alternativas | ✅ pipeline |
-| Saída sem parcial corrompido | sim | temporário → validação → SAF | ✅ pipeline; 🟡 providers reais |
-| Tarefa longa em background | desktop N/A | dataSync em API 29+; JobStore + wake lock + redelivery | ✅ digital; 🟡 reteste alpha4/lock-screen |
-| Cancelamento seguro | sim | UI/notificação + coroutine/native/FFmpeg cleanup | ✅ implementação; 🟡 aparelho |
-| Pouco armazenamento | erro controlado | preflight conservador | ✅ digital |
-| Demucs runtime | htdemucs_6s | `demucs.cpp` C++17/JNI arm64 | ✅ build/contrato; 🟡 aparelho |
-| Demucs checkpoint | htdemucs_6s | revisão + bytes + SHA-256 + `dmc6` | ✅ gate digital |
-| Demucs sample rate | 44,1 kHz | prepara 44,1 kHz estéreo | ✅ implementação; resampling obrigatório do modelo |
-| Demucs 6 stems | drums/bass/other/vocals/guitar/piano | mesma ordem fixa | ✅ contrato/pipeline; 🟡 áudio real |
-| Demucs chunking | engine desktop | 7,8 s window / 5,5 s core / 1,15 s contexto | ✅ unitário/estrutura; 🟡 seams reais |
-| Demucs outputs | 6 stems | WAV float32 estéreo, frames alinhados | ✅ validação estrutural; 🟡 qualidade física |
-| Demucs modelo fora do app | ambiente desktop | fora do APK, cache privado verificado | ✅ implementação |
-| Demucs cancelamento | sim | coroutine + native + cleanup | ✅ implementação; 🟡 aparelho |
-| Métricas Demucs | ambiente desktop | elapsed + pico PSS observado | ✅ instrumentado; 🟡 benchmark real |
-| BS-RoFormer / Alta qualidade no Android | existe no Linux/histórico alpha8 | **não faz parte do produto Android alvo** | 🗑️ remover integralmente no próximo APK |
-| Comparar motores no Android | existe como conceito Linux/histórico | **não existe no produto Android alvo** | 🗑️ remover integralmente no próximo APK |
-| Shared gain backing/guitar | sim | mesma regra | ⏳ workflow/exportação |
-| Backup de projeto | sim | interoperável | ⏳ M3/M8 |
-| Projetos | manifest JSON | schema versionado | ⏳ M3 |
+| Afinações suportadas | referência | 18 | ✅ domínio |
+| Delta de semitons | referência | equivalente | ✅ domínio |
+| Conversões inválidas | bloqueadas | bloqueadas | ✅ domínio |
+| Normalização de nomes | referência | equivalente | ✅ domínio |
+| Busca case/accent insensitive | sim | contrato portado | 🟡 UI/projetos |
+| Separação | baseline Linux | Demucs `htdemucs_6s` | ✅ decisão + runtime + áudio real |
+| Seis stems | referência | drums/bass/other/vocals/guitar/piano | ✅ |
+| Separação 44,1 kHz | referência | float32 estéreo 44,1 kHz | ✅ |
+| Continuidade entre chunks | referência | window/core/contexto fixos | ✅ áudio real alpha9.1 |
+| Métricas de separação | n/a | elapsed/PSS/chunks/thermal | ✅ |
+| Background | desktop n/a | Foreground Service `:media` | ✅ digital + uso físico |
+| Cancelamento | referência | UI/notificação + cleanup | ✅ implementação; 🟡 regressão final |
+| Pitch | Rubber Band R3 | Rubber Band R3 NDK/JNI | ✅ digital; 🟡 auditivo final |
+| Preservar duração | sim | validação + golden | ✅ digital |
+| Preservar canais | sim | validado | ✅ digital |
+| Exportação parcial segura | sim | temporário → valida → SAF | ✅ implementação |
+| Shared gain | referência | mesma regra | ⏳ |
+| Projetos | manifest | schema versionado | ⏳ |
+| Backup/restore | referência | interoperável no escopo comum | ⏳ |
+| Release signing | n/a | chave privada de produção | ⏳ |
 
-Legenda: ✅ implementado/validado no nível indicado · 🟡 depende de validação física/integração adicional · ⏳ pendente.
+Legenda: ✅ validado no nível indicado · 🟡 requer fechamento físico/integração · ⏳ pendente.

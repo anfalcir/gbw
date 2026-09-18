@@ -1,301 +1,127 @@
 # GBW — Estado Atual
 
-> ## Checkpoint mais recente — assinatura estável de homologação
->
-> A partir de **6.0.0-alpha9.1 / versionCode 10**, os APKs de homologação usam um certificado estável próprio.
-> O alpha8 e o primeiro alpha9 foram assinados por debug keys efêmeras diferentes e **não podem atualizar um ao outro**.
-> É necessária uma única desinstalação para entrar na nova cadeia de homologação; depois disso, APKs futuros com o mesmo certificado poderão atualizar normalmente por cima.
->
-> - commit: `5d889e3ec1e8f1ffc3221dc24556ed0adac6d38d`
-> - Android CI: **#83 / run 35373520877 — SUCCESS**
-> - APK: `55.470.133` bytes
-> - APK SHA-256: `eb8109b4252f1321ed961860ecd6754f59f6641cd2879ab7f2b07f8e64d2ba6b`
-> - certificado SHA-256: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
-> - perfil: homologação/debug somente; **não usar em produção**
-> - detalhes: `docs/ANDROID_HOMOLOGATION_SIGNING.md`
-
 **Data:** 2026-09-18  
 **Repositório:** `anfalcir/gbw`  
-**Branch consolidada:** `main`  
-**Branch oficial de desenvolvimento Android:** `dev/android-6.0`
+**Branch Android:** `dev/android-6.0`
 
-## Organização
+## Regras de preservação
 
-- `linux/` — distribuição operacional congelada do baseline Linux 5.23 e fonte de verdade funcional.
-- `android/` — aplicação Android nativa ativa, linha 6.x.
-- `docs/` — contratos, roadmap, paridade, CI e handoff.
-- `.github/workflows/` — automação CI.
+- `linux/` é o baseline congelado **GBW Linux 5.23.0**.
+- O desenvolvimento Android não pode modificar `linux/` como efeito colateral.
+- A separação no Android usa **exclusivamente Demucs `htdemucs_6s`**.
 
-## Linux
+## Baseline físico homologado — alpha9.1
 
-- Baseline congelado: **GBW Linux 5.23.0**.
-- SHA-256 do pacote de origem: `ca4e0b1b95e9f308deb9ae8bccce673a091631105cb4fbd020909f6fef64ce4a`.
-- `linux/app/` preserva a distribuição completa expandida diretamente do pacote homologado.
-- `linux/MANIFEST.sha256` fixa a integridade byte-a-byte da árvore preservada.
-- A referência Linux permanece imutável durante a migração Android salvo decisão explícita de nova baseline.
+Versão: `6.0.0-alpha9.1`  
+versionCode: `10`  
+Commit funcional: `5d889e3ec1e8f1ffc3221dc24556ed0adac6d38d`  
+CI: #83 / run `35373520877` — **SUCCESS**
 
-## Android
+APK:
+- bytes: `55,470,133`;
+- SHA-256: `eb8109b4252f1321ed961860ecd6754f59f6641cd2879ab7f2b07f8e64d2ba6b`;
+- certificado de homologação SHA-256: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`.
 
-Linha atual: **6.0.0-alpha8**.
+Homologação física no Samsung Galaxy Tab A11+:
+- resultado: **SUCCESS 100%**;
+- 6 stems;
+- 44,1 kHz;
+- duração da fonte: 211,9 s;
+- tempo total: **1977 s**;
+- PSS observado: **1714 MiB**;
+- chunks: **39**;
+- mediana por chunk: **45,9 s**;
+- máximo por chunk: **87,3 s**;
+- térmico: **leve**;
+- áudio dos seis stems: **aprovado**, sem cortes, falhas, clicks ou seams percebidos.
 
-### Decisão de produto — separação única no Android
+Comparação contra alpha8:
+- tempo: 2165 → 1977 s (**-188 s / -8,7%**);
+- PSS: 2180 → 1714 MiB (**-466 MiB / -21,4%**);
+- mediana: 53,5 → 45,9 s (**-14,2%**);
+- máximo: 68,4 → 87,3 s; acompanhar outliers;
+- térmico: leve → leve;
+- qualidade: aprovada em ambos.
 
-Decisão consolidada em 2026-09-18 após a homologação física do Demucs no tablet:
+O alpha9.1 com **BLAS 2 threads** é o baseline físico vigente.
 
-- o **GBW Android terá uma única função de Separação**, usando somente **Demucs `htdemucs_6s`**;
-- no produto Android deixam de existir os conceitos **Rápida**, **Alta qualidade**, **Comparar**, seletor de motor ou preferência de separador;
-- essa simplificação é **deliberada e específica do Android** por custo computacional, tempo de processamento, complexidade operacional e manutenção em hardware móvel;
-- o **GBW Linux 5.23 permanece inalterado** e continua preservando suas opções históricas;
-- o próximo APK deve remover não apenas botões/textos, mas também toda infraestrutura Android exclusiva de múltiplos motores: BS-RoFormer/PTE, ExecuTorch/XNNPACK, PFFFT usado somente por esse caminho, importador/manager do PTE, ações/intents/branches do Foreground Service, estados de job específicos, modo Comparar, preferências, testes, scripts, gates de CI, artefatos, dependências, recursos e documentação que não tenham outro uso;
-- após a limpeza, **“Separação” = Demucs** em UI, domínio, serviços, persistência e documentação Android;
-- nenhum código morto de BS-RoFormer/Comparar deve permanecer “para talvez usar depois”; eventual retomada futura exigirá uma nova decisão explícita e uma branch/feature própria;
-- compatibilidade de projetos/backups deve tratar essa diferença como divergência de plataforma, sem tentar reintroduzir múltiplos motores no Android.
+## Candidato A/B — alpha9.2-4t
 
-### Domínio/UI já portados
+Versão: `6.0.0-alpha9.2-4t`  
+versionCode: `11`  
+Commit funcional: `75adc0c223291fdb40a91d23cc40aa1134cbe60f`  
+CI: #85 / run `35378498398` — **SUCCESS**
 
-- projeto nativo Kotlin + Jetpack Compose;
-- shell escuro/imersivo para Android, com safe drawing insets e conteúdo centralizado em telas largas;
-- Fonte local via SAF conectada diretamente à seleção usada pela tela de Separação;
-- regras de afinação, delta global, bloqueios de conversão e normalização da v5.23;
-- no alpha8 ainda existem rótulos/infraestrutura de **Rápida / Demucs** e **Alta qualidade / BS-RoFormer**; ambos estão **deprecated para o próximo APK**;
-- estado-alvo já decidido: **Separação única = Demucs `htdemucs_6s`**;
-- estados Ideal / Adequado / Ressalva do Pitch de Arquivo;
-- inspetor WAV nativo + inspeção complementar via FFmpeg;
-- UI responsiva do Pitch de Arquivo e da Separação via SAF.
+APK:
+- bytes: `55,470,133`;
+- SHA-256: `79e1f740b02787f27bbf284fdae4dcbe3e738a211d6997facb7ba18fb628a012`;
+- mesmo certificado estável de homologação.
 
-### Rubber Band R3 / Pitch de Arquivo — gate digital concluído
+Variável experimental:
+- alpha9.1: BLAS default = 2 threads;
+- alpha9.2-4t: BLAS default = 4 threads.
 
-- Rubber Band Library `4.0.0` via NDK/JNI;
-- source pin `1d95888bec3ae0a17c0c4af791810d5a63f6bc35`;
-- ABI inicial `arm64-v8a`;
-- R3/Finer, offline em duas passagens (`study` → `process`);
-- PCM float32 em blocos, preservando canais;
-- pitch positivo/negativo, time ratio `1.0` e formant preserved para Vocal;
-- cancelamento cooperativo e cleanup;
-- golden host sintético para +3/-3 semitons em estéreo;
-- pipeline SAF → FFmpeg → R3 → validação → WAV32f/WAV24/FLAC24 → SAF final;
-- preflight de armazenamento, Foreground Service, JobStore, wake lock limitado e redelivery seguro.
+Todo o restante foi preservado:
+- um chunk por vez;
+- mesma janela/core/contexto;
+- mesmo modelo e pesos;
+- mesmo `demucs.cpp`;
+- mesmo Eigen;
+- mesmo OpenBLAS;
+- mesmo pipeline de WAV;
+- mesma UI;
+- mesma instrumentação.
 
-### Demucs `htdemucs_6s` — implementação digital concluída
+## Runtime Demucs Android
 
-Runtime Android:
-
-- `demucs.cpp` C++17 integrado via NDK/JNI;
-- source pin: `f1206e9adeea103aef4a636b9e62297cf1f8e34e`;
-- Eigen pin: `dd8c71e62852b2fe429edb6682ac91fd1c578a26`;
-- ABI inicial: `arm64-v8a`;
-- biblioteca empacotada: `libgbw_demucs.so`;
-- JNI rejeita modelo de quatro fontes e exige a janela fixa de 343.980 frames;
-- o engine QUICK alpha8 usa diretamente `demucscpp::model_inference()` sobre a janela já segmentada pelo GBW, evitando a segunda camada redundante de shift/split/overlap que existia no alpha7;
-- os buffers Demucs/STFT nativos são reutilizados durante todo o job, reduzindo alocações por trecho;
-- build Demucs em `-O3 -DNDEBUG`; paralelismo Eigen continua deliberadamente desativado nesta etapa para isolar o ganho estrutural antes de testar multithreading;
-- janelas totalmente silenciosas produzem seis saídas silenciosas válidas em vez de NaN/erro de normalização;
-- identidade nativa registra `engine=direct-segment-v1;window_frames=343980;parallel=eigen-off`.
-
-Checkpoint externo:
-
-- contrato: `htdemucs_6s`;
-- arquivo: `ggml-model-htdemucs-6s-f16.bin`;
-- fonte: dataset `Retrobear/demucs.cpp` no Hugging Face;
-- revisão imutável: `5f5daffffcf06ad7b27a7285da327e18ea62068a`;
-- tamanho: `54,855,129` bytes;
+- modelo: `htdemucs_6s`;
+- checkpoint: `ggml-model-htdemucs-6s-f16.bin`;
+- bytes: `54,855,129`;
 - SHA-256: `09704f4ceae204e56e77d5eefd6ac71d7275be81fd507e6913371d59abcee856`;
-- modelo permanece fora do APK;
-- download usa `.part`, valida tamanho + SHA-256 e só então promove atomicamente para o cache privado;
-- CI baixa/reutiliza o checkpoint apenas após revalidar integridade e exige magic `dmc6` + nomes de tensores de arquitetura esperados.
+- source revision: `5f5daffffcf06ad7b27a7285da327e18ea62068a`;
+- demucs.cpp: `f1206e9adeea103aef4a636b9e62297cf1f8e34e`;
+- Eigen: `dd8c71e62852b2fe429edb6682ac91fd1c578a26`;
+- OpenBLAS 0.3.34: `e0166008be8e466242aa76b2ff75ce3f0fbf574a`;
+- ABI: `arm64-v8a`;
+- chunk parallelism: 1;
+- threads BLAS suportadas internamente: 1, 2, 4;
+- janela: 343.980 frames;
+- core: 242.550 frames;
+- contexto: 50.715 frames por lado;
+- PSS periódico: 4 s, preservando amostras antes/depois da inferência nativa.
 
-Pipeline Rápida:
+Stems fixos:
+1. drums
+2. bass
+3. other
+4. vocals
+5. guitar
+6. piano
 
-```text
-SAF input
-→ FFmpeg prepara WAV float32 estéreo 44,1 kHz
-→ modelo htdemucs_6s validado/carregado
-→ janelas nativas de 343.980 frames (7,8 s)
-→ core de 242.550 frames (5,5 s)
-→ contexto de 50.715 frames (1,15 s) em cada lado
-→ inferência 6 stems
-→ crop do core
-→ WAV float32 estéreo por stem
-→ valida sample rate/canais/frames
-→ mantém somente outputs completos
-```
+## Assinatura de homologação
 
-Ordem fixa dos seis stems:
+A partir de alpha9.1, builds de homologação usam certificado estável de teste:
 
-1. `drums`
-2. `bass`
-3. `other`
-4. `vocals`
-5. `guitar`
-6. `piano`
+`6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
 
-A implementação mede `elapsedMillis`, PSS amostrado também durante a chamada nativa, duração por chunk (mediana/máximo) e maior estado térmico observado. Preserva progresso persistido e remove saída parcial em falha/cancelamento.
+A CI valida o fingerprint do APK final. Essa chave é exclusivamente de homologação e **não deve ser usada em produção**.
 
-### UI de Separação
+## Próximo gate físico
 
-- seleção do áudio via SAF;
-- **Rápida — Demucs `htdemucs_6s`** executa o pipeline real;
-- primeiro uso informa que o modelo externo será baixado/verificado;
-- progresso e estado vêm do mesmo Foreground Service dos jobs longos;
-- cancelamento pela UI/notificação;
-- **Alta qualidade / BS-RoFormer-SW** executa o pipeline real quando o PTE autoritativo está instalado;
-- o PTE pode ser importado via SAF e é revalidado por bytes + SHA-256;
-- ao concluir, a própria tela valida e lista os seis stems com **Ouvir/Parar**;
-- **Exportar os 6 stems…** usa SAF/OpenDocumentTree e copia os seis WAVs para a pasta escolhida pelo usuário, com validação de bytes e rollback dos arquivos criados se houver falha parcial;
-- `SeparationResultStore` persiste o último resultado completo com escrita atômica/lock cross-process;
-- upgrade alpha7 → alpha8 consegue recuperar os stems privados já concluídos no alpha7, desde que o app seja atualizado por cima sem desinstalar/limpar dados;
-- Comparar permanece bloqueado até o gate runtime arm64 da Alta qualidade.
+Instalar alpha9.2-4t **por cima do alpha9.1**, sem limpar dados, e repetir exatamente a mesma música.
 
-## BS-RoFormer-SW — implementação histórica do alpha8; retirada obrigatória no próximo APK
+Registrar:
+- sucesso/falha;
+- tempo total;
+- PSS observado;
+- 39 chunks esperados;
+- mediana;
+- máximo;
+- estado térmico;
+- qualidade auditiva dos seis stems.
 
-O workflow **BS-RoFormer Production PTE #3** (run `35289168951`) terminou **SUCCESS** e fixou o artifact autoritativo:
+Decisão:
+- manter 4 threads somente se houver ganho útil sem regressão de estabilidade, memória, térmico ou áudio;
+- caso contrário, restaurar 2 threads como default.
 
-- arquivo: `GBW-BS-RoFormer-SW-executorch-1.3.1-T1151.pte`;
-- bytes: `700,284,960`;
-- SHA-256: `8c3cc68404b7fadb2a41ec332b0493290d956f9490dc5c21c5120ee596807182`;
-- backend: XNNPACK;
-- ExecuTorch: `1.3.1`;
-- torch de export: `2.12.1+cpu`;
-- input: `[1,2,1025,1151,2]`;
-- output: `[1,6,2050,1151,2]`;
-- parâmetros: `174,656,564`.
-
-Pipeline Android: SAF → float32 stereo 44,1 kHz → PTE privado validado → ExecuTorch mmap → reflect/chunking 588800 → PFFFT STFT → XNNPACK masks → PFFFT ISTFT → overlap-add streaming → 6 WAVs float32 stereo.
-
-O manager implementa `.part`, Content-Length quando disponível, limite de bytes, cancelamento cooperativo, fsync, SHA-256, promoção atômica e cleanup. O PTE permanece fora do APK.
-
-**Status atual:** este bloco permanece documentado apenas para rastreabilidade do alpha8. A linha Android não seguirá com BS-RoFormer: o próximo APK deve remover essa implementação, seus modelos, dependências, UI, jobs, testes e gates exclusivos. A licença dos pesos deixa de ser gate do produto Android após a remoção completa; o Linux permanece fora dessa decisão.
-
-## Background/lifecycle
-
-- homologação física do alpha2 confirmou tema escuro, modo imersivo e ausência das sobreposições superior/inferior do Android;
-- o alpha2 isolou o self-test como `InvalidForegroundServiceTypeException`: em Android pré-15 o serviço era promovido com tipo `none`, proibido para targetSdk 36;
-- a homologação física do alpha3 confirmou que o mesmo M4A deixou de causar crash e passou a ser classificado com ressalva;
-- o alpha3 ainda apresentou `InvalidForegroundServiceTypeException` tanto na Separação Rápida quanto no self-test;
-- o alpha4 padroniza o serviço em `dataSync` para API 29+, mantendo API 28 no caminho legado; `dataSync` cobre o processamento local de arquivos do GBW;
-- seleção não-WAV, incluindo M4A/AAC, usa `MediaExtractor` para inspeção inicial e não executa FFprobe/FFmpeg na UI; a decodificação completa permanece no pipeline controlado;
-- o self-test persiste mensagem amigável e registra a exceção completa no Logcat;
-- no alpha5, `MediaProcessingService` roda no processo dedicado `:media`, isolando UI de falhas nativas/pressão de memória dos motores;
-- `JobStore` usa arquivo JSON atômico com lock cross-process, substituindo SharedPreferences para progresso/estado compartilhado;
-- Android 11+ reconcilia mortes do worker via `ApplicationExitInfo`, incluindo crash nativo, sinal, memória, PSS/RSS e fase registrada;
-- homologação física do alpha5: UI sobreviveu, self-test chegou a `SUCCESS 100%`, e a Separação Rápida isolou `crash Java/Kotlin` em `demucs:audio-prep`;
-- alpha6 remove SAF direto do FFmpeg no worker: os pipelines fazem `content:// → cópia privada local → FFmpeg/FFprobe local`, com streaming, `fsync`, cleanup e execução síncrona controlada;
-- homologação física do alpha6 com o mesmo M4A: a UI permaneceu viva e o job terminou de forma controlada em `demucs:audio-ffmpeg` com `NoClassDefFoundError`, antes de `demucs:model-load`;
-- inspeção do APK exato da CI #73 confirmou que `FFmpegKitConfig` referenciava `com.arthenica.smartexception.java.Exceptions`, mas essa classe não estava definida em nenhum DEX do APK;
-- alpha7 fixa explicitamente `smart-exception-java:0.2.1` + `smart-exception-common:0.2.1`, preserva a causa encadeada de erros de runtime e adiciona gate que lê as tabelas `class_defs` dos DEX do APK;
-- homologação física do alpha7 com o mesmo M4A: **SUCCESS 100%**, seis stems estruturais validados em 44,1 kHz, `4375 s` (1 h 12 min 55 s) e PSS observado de `195 MiB`; a notificação persistente/Foreground Service permaneceu ativa até o fim;
-- esse baseline físico revelou desempenho inadequado (~20× tempo real) e ausência de UX para ouvir/exportar os WAVs privados;
-- alpha8 remove a dupla segmentação no caminho QUICK, reutiliza buffers, compila o Demucs em `-O3`, instrumenta chunks/PSS/thermal e expõe preview + exportação dos stems.
-- Demucs e BS-RoFormer marcam `audio-stage`, `audio-ffmpeg` e `audio-validate` separadamente para diagnóstico físico;
-- `ForegroundService` é proprietário das tarefas pesadas;
-- Activity não é proprietária do job;
-- estado/progresso persistidos em `JobStore`;
-- cancelamento pela UI e notificação;
-- `PARTIAL_WAKE_LOCK` limitado durante processamento;
-- `START_REDELIVER_INTENT` para reinício seguro quando o Android redeliver o Intent;
-- temporários são isolados por `jobId` e saídas parciais são removidas em erro/cancelamento.
-
-## Toolchain fixado
-
-- AGP `9.4.0`;
-- Gradle `9.6.0`;
-- JDK `17`;
-- Kotlin `2.4.20`;
-- Compose BOM `2026.08.00`;
-- compileSdk `37`;
-- targetSdk `36`;
-- minSdk `28`;
-- NDK `27.2.12479018`;
-- CMake `3.22.1`.
-
-## CI Android
-
-A CI dispara em push/PR e mantém `workflow_dispatch` como contingência.
-
-Gates atuais:
-
-1. paridade/smoke de domínio;
-2. golden host Rubber Band R3;
-3. checkpoint real `htdemucs_6s`: cache revalidado, tamanho, SHA-256, magic `dmc6` e tensores esperados;
-4. testes unitários Android, incluindo contratos de chunking/modelo;
-5. Android Lint;
-6. `assembleDebug` NDK/CMake arm64;
-7. verificação de `libgbw_rubberband.so`, `libgbw_demucs.so` e `libgbw_bsroformer_spectral.so` dentro do APK;
-8. verificação do runtime Demucs otimizado dentro do APK (`engine=direct-segment-v1`, janela fixa e paralelismo Eigen off);
-9. verificação de classes Java críticas do FFmpegKit no DEX final (`FFmpegKitConfig` + `smart-exception Exceptions`);
-10. verificação do Manifest mesclado: worker `:media` + `foregroundServiceType=dataSync`;
-11. metadata/SHA-256 do APK incluindo pins do runtime e modelo;
-12. upload do APK debug e relatórios.
-
-Checkpoint Android atual para homologação física:
-
-- versão: `6.0.0-alpha8`;
-- commit funcional: `be9b8bc765aaca5cd0f774c1e3774e16679e7da8`;
-- Android CI run `#79` / run ID `35361804071`: **SUCCESS**;
-- APK: `64,940,273` bytes;
-- SHA-256: `f47826ff94691a5192a6f491e6b9787e9611ad6a13b2c5930e39512b91431983`;
-- Unit Tests / Lint / assembleDebug: **PASS**;
-- gate de runtime Demucs otimizado: **PASS**;
-- gate de runtime FFmpegKit/Smart Exception: **PASS**;
-- gate do Manifest mesclado do worker: **PASS**;
-- auditoria do diff alpha7 → alpha8: nenhuma alteração em `linux/`.
-
-Baseline físico anterior para comparação:
-
-- alpha7: `4375 s`, `195 MiB`, seis stems estruturais, SUCCESS;
-- usar esse resultado para A/B de desempenho e qualidade com o alpha8.
-
-## Licenças / distribuição
-
-- `demucs.cpp`: MIT no source pin usado;
-- Eigen: família MPL-2.0 conforme upstream;
-- dataset `Retrobear/demucs.cpp`: metadata pública declara MIT e documenta a origem dos pesos convertidos;
-- Rubber Band continua sendo o principal gate de licença antes de RC/distribuição pública: GPL v2-or-later ou licença comercial apropriada.
-
-Detalhes: `android/app/src/main/cpp/THIRD_PARTY.md`.
-
-## O que ainda NÃO está homologado
-
-A implementação digital não equivale a homologação física completa. Permanecem para dispositivo Android arm64 real/percepção humana:
-
-- execução física do **engine QUICK otimizado alpha8** com a mesma música real e comparação contra o baseline alpha7 de 4375 s / 195 MiB;
-- avaliação auditiva A/B dos seis stems, especialmente continuidade nas fronteiras de core de 5,5 s e qualquer alteração causada pela remoção do shift/split interno redundante;
-- PSS amostrado, thermal throttling, tempo, bateria e estabilidade prolongada do alpha8;
-- execução com Home/outro app/tela bloqueada;
-- providers SAF reais em cancelamento/falha;
-- execução JNI/R3 e percepção auditiva final do Pitch de Arquivo.
-
-Também permanecem como gates de desenvolvimento:
-
-- remoção completa da arquitetura multi-engine do Android: BS-RoFormer/PTE, Alta qualidade, Comparar e todo código/dependência/gate sem uso após a consolidação Demucs-only;
-- revisão de APK/tamanho/dependências para confirmar que ExecuTorch/XNNPACK/PFFFT e artefatos exclusivos do BS-RoFormer desapareceram do produto;
-- workflow completo Fonte → Separação → Afinação → Exportação;
-- shared gain/exportação final;
-- projetos/backup/restore cross-platform;
-- hardening, auditoria de licenças, release assinado e homologação final.
-
-## Observação física de UX — ícone persistente da notificação
-
-- no alpha8, durante o Foreground Service, o ícone pequeno persistente aparece como um quadrado sólido/sem identidade visual no Samsung One UI;
-- causa confirmada no recurso atual `android/app/src/main/res/drawable/ic_stat_gbw.xml`: ele contém um retângulo branco opaco `M4,4h16v16h-16z`, que o Android trata como máscara preenchida do `smallIcon`;
-- **correção obrigatória no próximo APK**: substituir por VectorDrawable específico para status/notification, monocromático, sem qualquer fundo opaco e derivado visualmente da logo GBW;
-- preferência visual: silhueta reconhecível da palheta/logo com waveform simplificada em negativo/recorte, mantendo legibilidade real em 24 dp;
-- manter o launcher/adaptive icon separado: não reutilizar o ícone colorido normal como `setSmallIcon`;
-- validar em barra de status e notificação expandida, tema claro/escuro do One UI, estados RUNNING/CANCELLING e demais jobs do mesmo Foreground Service;
-- opcionalmente usar a logo completa como `largeIcon` na notificação expandida, sem alterar o contrato obrigatório do `smallIcon` monocromático.
-
-## Próximo gate
-
-1. instalar o alpha8 **por cima do alpha7**, sem desinstalar nem limpar dados;
-2. abrir **2. Separação** e confirmar que o resultado alpha7 já existente é recuperado como **Stems disponíveis**;
-3. usar **Ouvir** nos seis stems e **Exportar os 6 stems…** para uma pasta SAF; validar musicalmente os arquivos alpha7 antes de qualquer recomputação;
-4. executar novamente o mesmo M4A no alpha8 e registrar tempo total, PSS, mediana/máximo por chunk e maior status térmico;
-5. comparar o tempo com o baseline alpha7 de **4375 s** e confirmar que o contador continua avançando sem regressão de background;
-6. ouvir/exportar os seis stems alpha8 e fazer A/B com alpha7, procurando cortes, clicks, mudança de separação ou seams nas fronteiras;
-7. somente depois desse gate decidir se vale adicionar paralelismo controlado; o alpha8 mantém Eigen single-thread deliberadamente para medir primeiro o ganho da correção estrutural;
-8. validar Home/outro app/tela bloqueada e cancelamento durante uma execução longa;
-9. no próximo APK, executar a **limpeza Demucs-only** completa do Android e validar que não restou qualquer tela, texto, botão, estado, código, dependência, artefato ou gate de CI referente a Alta qualidade / BS-RoFormer / Comparar; depois seguir para o workflow completo.
-
-## Continuidade
-
-O prompt oficial para outro chat está em `docs/ANDROID_HANDOFF_PROMPT.md`. Toda nova sessão deve confirmar HEAD remoto e CI real antes de escrever; SHAs documentados são checkpoints, não substituem a leitura do estado remoto atual.
+Não alterar chunking/contexto antes de concluir esse A/B.
