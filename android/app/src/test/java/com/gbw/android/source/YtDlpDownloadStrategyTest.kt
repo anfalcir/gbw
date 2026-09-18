@@ -13,7 +13,9 @@ class YtDlpDownloadStrategyTest {
         assertEquals("251", attempts.first().format)
         assertTrue(attempts.size >= 3)
         assertTrue(attempts.any { it.forceRuntimeUpdateBefore })
-        assertTrue(attempts.drop(1).any { it.extractorArgs?.contains("web_embedded") == true })
+        assertTrue(attempts.drop(1).any { it.extractorArgs == "youtube:player_client=android_vr" })
+        assertTrue(attempts.drop(1).any { it.extractorArgs == "youtube:player_client=web_embedded" })
+        assertTrue(attempts.drop(1).none { it.extractorArgs?.contains(",") == true })
     }
 
     @Test

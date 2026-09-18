@@ -25,15 +25,15 @@ internal object YtDlpDownloadStrategy {
                 format = freshFormatId.ifBlank { "bestaudio/best" },
             ),
             YtDlpDownloadAttempt(
-                name = "youtube-updated-web-embedded",
-                format = "bestaudio[protocol^=http]/bestaudio/best",
-                extractorArgs = "youtube:player_client=default,web_embedded",
+                name = "youtube-updated-android-vr",
+                format = "bestaudio/best",
+                extractorArgs = "youtube:player_client=android_vr",
                 forceRuntimeUpdateBefore = true,
             ),
             YtDlpDownloadAttempt(
-                name = "youtube-updated-default-no-ios",
-                format = "bestaudio/best",
-                extractorArgs = "youtube:player_client=default,-ios",
+                name = "youtube-updated-web-embedded",
+                format = "bestaudio[protocol^=http]/bestaudio/best",
+                extractorArgs = "youtube:player_client=web_embedded",
             ),
         )
     }
