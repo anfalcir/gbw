@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.gbw.android.BuildConfig
 import com.gbw.android.audio.AudioInspectionDispatcher
 import com.gbw.android.background.JobStore
@@ -73,6 +74,7 @@ import com.gbw.android.domain.QualityStatus
 import com.gbw.android.domain.RankedSourceCandidate
 import com.gbw.android.domain.SourceSearchDepth
 import com.gbw.android.domain.SourceSearchRequest
+import com.gbw.android.domain.SourceSearchLinks
 import com.gbw.android.domain.Tunings
 import com.gbw.android.separation.DemucsRuntimeMonitor
 import com.gbw.android.separation.DemucsThreadPolicy
@@ -233,13 +235,7 @@ private fun SourceScreen(
     var inspecting by remember { mutableStateOf(false) }
     val onlineScope = rememberCoroutineScope()
     val onlineCoordinator = remember { SourceSearchCoordinator() }
-    var onlineArtist by rememberSaveable { mutableStateOf("") }
-    var onlineSong by rememberSaveable { mutableStateOf("") }
-    var onlineDepth by rememberSaveable { mutableStateOf(SourceSearchDepth.ROBUST.name) }
-    var onlineSearching by remember { mutableStateOf(false) }
-    var onlineResults by remember { mutableStateOf<List<RankedSourceCandidate>>(emptyList()) }
-    var onlineMessage by remember { mutableStateOf<String?>(null) }
-    var manualSourceUrl by rememberSaveable { mutableStateOf("") }
+    val searchState: SourceSearchViewModel = viewModel()
     val selectedDisplayName = remember(selectedUriText) {
         selectedUriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
     }
@@ -318,83 +314,66 @@ private fun SourceScreen(
                 )
 
                 OutlinedTextField(
-                    value = onlineArtist,
-                    onValueChange = { onlineArtist = it },
+                    value = searchState.artist,
+                    onValueChange = searchState::setArtist,
                     label = { Text("Artista") },
                     placeholder = { Text("Ex.: Wolves At The Gate") },
-                    enabled = !onlineSearching,
+                    enabled = !searchState.searching,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    value = onlineSong,
-                    onValueChange = { onlineSong = it },
+                    value = searchState.song,
+                    onValueChange = searchState::setSong,
                     label = { Text("Música") },
                     placeholder = { Text("Ex.: Enemy") },
-                    enabled = !onlineSearching,
+                    enabled = !searchState.searching,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
                 SimpleDropdown(
                     label = "Profundidade",
-                    selected = if (onlineDepth == SourceSearchDepth.MAXIMUM.name) "Máxima" else "Robusta",
+                    selected = if (searchState.depthName == SourceSearchDepth.MAXIMUM.name) "Máxima" else "Robusta",
                     values = listOf("Robusta", "Máxima"),
                     onSelect = {
-                        onlineDepth = if (it == "Máxima") {
-                            SourceSearchDepth.MAXIMUM.name
-                        } else {
-                            SourceSearchDepth.ROBUST.name
-                        }
+                        searchState.setDepth(
+                            if (it == "Máxima") SourceSearchDepth.MAXIMUM else SourceSearchDepth.ROBUST,
+                        )
                     },
                 )
 
                 Button(
                     onClick = {
-                        val song = onlineSong.trim()
+                        val song = searchState.song.trim()
                         if (song.isBlank()) {
-                            onlineMessage = "Informe o nome da música."
+                            searchState.setMessage("Informe o nome da música.")
                         } else {
-                            onlineSearching = true
-                            onlineResults = emptyList()
-                            onlineMessage = "Pesquisando fontes…"
+                            searchState.beginSearch()
                             val request = SourceSearchRequest(
-                                artist = onlineArtist.trim(),
+                                artist = searchState.artist.trim(),
                                 song = song,
-                                depth = SourceSearchDepth.valueOf(onlineDepth),
+                                depth = SourceSearchDepth.valueOf(searchState.depthName),
                             )
                             onlineScope.launch {
                                 try {
-                                    val result = onlineCoordinator.search(request)
-                                    onlineResults = result.candidates
-                                    onlineMessage = when {
-                                        result.candidates.isEmpty() && result.warnings.isNotEmpty() ->
-                                            "Nenhuma fonte encontrada. " + result.warnings.joinToString(" ")
-                                        result.candidates.isEmpty() ->
-                                            "Nenhum candidato confiável encontrado."
-                                        result.warnings.isNotEmpty() ->
-                                            "${result.candidates.size} resultado(s). " + result.warnings.joinToString(" ")
-                                        else ->
-                                            "${result.candidates.size} resultado(s) encontrado(s)."
-                                    }
+                                    searchState.completeSearch(onlineCoordinator.search(request))
                                 } catch (error: Exception) {
-                                    onlineMessage = error.message ?: "Falha na pesquisa online."
-                                } finally {
-                                    onlineSearching = false
+                                    searchState.failSearch(error)
                                 }
                             }
                         }
                     },
-                    enabled = !onlineSearching,
+                    enabled = !searchState.searching,
                 ) {
-                    Text(if (onlineSearching) "Pesquisando…" else "Encontrar fontes")
+                    Text(if (searchState.searching) "Pesquisando…" else "Encontrar fontes")
                 }
 
-                onlineMessage?.let {
+                searchState.message?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (onlineResults.isEmpty() && !onlineSearching) {
+                        color = if (searchState.results.isEmpty() && !searchState.searching) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
                             MaterialTheme.colorScheme.primary
@@ -402,7 +381,7 @@ private fun SourceScreen(
                     )
                 }
 
-                onlineResults.forEachIndexed { index, candidate ->
+                searchState.results.forEachIndexed { index, candidate ->
                     OnlineSourceCandidateCard(
                         candidate = candidate,
                         recommended = index == 0 && !candidate.previewOnly,
@@ -412,35 +391,74 @@ private fun SourceScreen(
                                     Intent(Intent.ACTION_VIEW, Uri.parse(candidate.url)),
                                 )
                             }.onFailure { error ->
-                                onlineMessage =
+                                searchState.setMessage(
                                     "Não foi possível abrir a fonte: " +
-                                        (error.message ?: "nenhum aplicativo compatível.")
+                                        (error.message ?: "nenhum aplicativo compatível."),
+                                )
                             }
                         },
                     )
                 }
 
-                if (onlineResults.isNotEmpty()) {
+                if (searchState.results.isNotEmpty()) {
                     Text(
-                        "Abra a fonte no serviço correspondente. Quando tiver o arquivo de áudio de forma permitida pelo serviço, " +
-                            "use “Selecionar áudio…” acima para incorporá-lo ao fluxo do GBW.",
+                        "Os resultados são links de descoberta. O GBW não baixa nem extrai mídia automaticamente nesta etapa.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
+                val broadRequest = SourceSearchRequest(
+                    artist = searchState.artist.trim(),
+                    song = searchState.song.trim(),
+                    depth = SourceSearchDepth.valueOf(searchState.depthName),
+                )
+                val broadLinks = remember(searchState.artist, searchState.song, searchState.depthName) {
+                    SourceSearchLinks.forRequest(broadRequest)
+                }
+                if (broadLinks.isNotEmpty()) {
+                    Divider()
+                    Text("Busca ampla", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Se os providers diretos não encontrarem a faixa, abra a pesquisa equivalente em outros serviços.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        broadLinks.forEach { link ->
+                            OutlinedButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse(link.url)),
+                                        )
+                                    }.onFailure { error ->
+                                        searchState.setMessage(
+                                            "Não foi possível abrir ${link.label}: " +
+                                                (error.message ?: "nenhum aplicativo compatível."),
+                                        )
+                                    }
+                                },
+                            ) {
+                                Text(link.label)
+                            }
+                        }
+                    }
+                }
+
                 Divider()
                 Text("URL manual", fontWeight = FontWeight.SemiBold)
                 OutlinedTextField(
-                    value = manualSourceUrl,
-                    onValueChange = { manualSourceUrl = it },
+                    value = searchState.manualUrl,
+                    onValueChange = searchState::setManualUrl,
                     label = { Text("Link da fonte") },
                     placeholder = { Text("https://…") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                val manualUri = remember(manualSourceUrl) {
-                    manualSourceUrl.trim()
+                val manualUri = remember(searchState.manualUrl) {
+                    searchState.manualUrl.trim()
                         .takeIf { it.startsWith("https://") || it.startsWith("http://") }
                         ?.let { runCatching { Uri.parse(it) }.getOrNull() }
                 }
@@ -448,14 +466,15 @@ private fun SourceScreen(
                     onClick = {
                         val uri = manualUri
                         if (uri == null) {
-                            onlineMessage = "Informe uma URL válida iniciando com http:// ou https://."
+                            searchState.setMessage("Informe uma URL válida iniciando com http:// ou https://.")
                         } else {
                             runCatching {
                                 context.startActivity(Intent(Intent.ACTION_VIEW, uri))
                             }.onFailure { error ->
-                                onlineMessage =
+                                searchState.setMessage(
                                     "Não foi possível abrir a URL: " +
-                                        (error.message ?: "nenhum aplicativo compatível.")
+                                        (error.message ?: "nenhum aplicativo compatível."),
+                                )
                             }
                         }
                     },

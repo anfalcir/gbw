@@ -24,7 +24,7 @@ data class SourceDiscoveryResult(
  * going offline never destroys the whole search experience.
  */
 class SourceSearchCoordinator(
-    private val providers: List<SourceSearchProviderClient> = listOf(BandcampDiscoveryProvider()),
+    private val providers: List<SourceSearchProviderClient> = listOf(BandcampDiscoveryProvider(), AppleMusicDiscoveryProvider()),
 ) {
     suspend fun search(request: SourceSearchRequest): SourceDiscoveryResult {
         require(request.song.isNotBlank()) { "Informe o nome da música." }

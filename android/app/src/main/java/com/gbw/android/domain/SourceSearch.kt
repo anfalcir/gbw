@@ -9,6 +9,7 @@ enum class SourceProvider(val publicLabel: String) {
     BANDCAMP("Bandcamp"),
     SOUNDCLOUD("SoundCloud"),
     YOUTUBE("YouTube"),
+    APPLE_MUSIC("Apple Music"),
     OTHER("Outra"),
 }
 
@@ -35,6 +36,26 @@ data class SourceCandidateDraft(
     val previewOnly: Boolean = false,
     val officialSignal: Boolean = false,
 )
+
+data class SourceSearchLink(
+    val label: String,
+    val url: String,
+)
+
+object SourceSearchLinks {
+    fun forRequest(request: SourceSearchRequest): List<SourceSearchLink> {
+        val query = listOf(request.artist.trim(), request.song.trim())
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+        if (query.isBlank()) return emptyList()
+        val encoded = java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8.name())
+        return listOf(
+            SourceSearchLink("Pesquisar no YouTube", "https://www.youtube.com/results?search_query=$encoded"),
+            SourceSearchLink("Pesquisar no SoundCloud", "https://soundcloud.com/search/sounds?q=$encoded"),
+            SourceSearchLink("Pesquisar no Bandcamp", "https://bandcamp.com/search?q=$encoded"),
+        )
+    }
+}
 
 data class RankedSourceCandidate(
     val provider: SourceProvider,
@@ -178,6 +199,7 @@ object SourceSearchRules {
             SourceProvider.BANDCAMP -> 45
             SourceProvider.SOUNDCLOUD -> 48
             SourceProvider.YOUTUBE -> 50
+            SourceProvider.APPLE_MUSIC -> 48
             SourceProvider.OTHER -> 45
         }
         score += draft.qualityBonus
@@ -217,6 +239,13 @@ object SourceSearchRules {
                 } else if (artistSimilarity >= 0.82) {
                     score += 6
                     reasons += "canal compatível"
+                }
+            }
+            SourceProvider.APPLE_MUSIC -> {
+                if (draft.officialSignal || artistSimilarity >= 0.80) {
+                    score += 8
+                    official = true
+                    reasons += "catálogo oficial"
                 }
             }
             SourceProvider.BANDCAMP, SourceProvider.SOUNDCLOUD, SourceProvider.OTHER -> {
