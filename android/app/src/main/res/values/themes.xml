@@ -1,7 +1,13 @@
 <resources>
-    <style name="Theme.GBW" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.GBW" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">#0F1117</item>
+        <item name="android:colorAccent">#BDA8FF</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowNoTitle">true</item>
     </style>
 </resources>

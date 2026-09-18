@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -55,6 +57,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.gbw.android.BuildConfig
 import com.gbw.android.audio.AudioInspectionDispatcher
 import com.gbw.android.background.JobStore
 import com.gbw.android.background.MediaProcessingService
@@ -86,9 +89,9 @@ private enum class AppPage(val title: String, val group: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GbwApp() {
-    MaterialTheme {
-        Surface(Modifier.fillMaxSize()) {
-            var page by rememberSaveable { mutableStateOf(AppPage.FILE_PITCH.name) }
+    GbwTheme {
+        Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
+            var page by rememberSaveable { mutableStateOf(AppPage.SOURCE.name) }
             val current = AppPage.valueOf(page)
             val configuration = LocalConfiguration.current
             val wide = configuration.screenWidthDp >= 840
@@ -97,7 +100,7 @@ fun GbwApp() {
 
             if (wide) {
                 Row(Modifier.fillMaxSize()) {
-                    SideBar(current, onSelect = { page = it.name }, Modifier.width(290.dp).fillMaxHeight())
+                    SideBar(current, onSelect = { page = it.name }, Modifier.width(260.dp).fillMaxHeight())
                     Divider(Modifier.fillMaxHeight().width(1.dp))
                     PageContent(current, Modifier.weight(1f))
                 }
@@ -134,7 +137,7 @@ private fun SideBar(current: AppPage, onSelect: (AppPage) -> Unit, modifier: Mod
     val scroll = rememberScrollState()
     Column(modifier.padding(16.dp).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("GBW", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Android 6.0.0-alpha1", style = MaterialTheme.typography.bodySmall)
+        Text("Android ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))
         var lastGroup = ""
         AppPage.entries.forEach { page ->
@@ -156,17 +159,22 @@ private fun SideBar(current: AppPage, onSelect: (AppPage) -> Unit, modifier: Mod
 
 @Composable
 private fun PageContent(page: AppPage, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize().padding(20.dp)) {
-        when (page) {
-            AppPage.SOURCE -> PlaceholderScreen("Fonte", "Aquisição local/online será conectada após o gate de download Android.")
-            AppPage.SEPARATION -> SeparationScreen()
-            AppPage.TUNING -> PlaceholderScreen("Afinação & Pitch", "Regras de afinação da v5.23 já foram portadas para o domínio Android.")
-            AppPage.EXPORT -> PlaceholderScreen("Exportação", "A estrutura de exportação será ligada aos engines de áudio após FFmpeg/R3.")
-            AppPage.PROJECTS -> PlaceholderScreen("Projetos", "Persistência cross-platform/SAF entra no M3, preservando a v5.23 como referência.")
-            AppPage.LOGS -> PlaceholderScreen("Logs", "Logs de jobs e processamento serão persistidos por operação.")
-            AppPage.FILE_PITCH -> FilePitchScreen()
-            AppPage.SETTINGS -> PlaceholderScreen("Configurações", "Separação Rápida é o padrão Android; demais preferências seguirão a v5.23.")
-            AppPage.SYSTEM -> SystemScreen()
+    Box(
+        modifier = modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 20.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Box(Modifier.fillMaxWidth().widthIn(max = 1120.dp)) {
+            when (page) {
+                AppPage.SOURCE -> PlaceholderScreen("Fonte", "Aquisição local/online será conectada após o gate de download Android.")
+                AppPage.SEPARATION -> SeparationScreen()
+                AppPage.TUNING -> PlaceholderScreen("Afinação & Pitch", "Regras de afinação da v5.23 já foram portadas para o domínio Android.")
+                AppPage.EXPORT -> PlaceholderScreen("Exportação", "A estrutura de exportação será ligada aos engines de áudio após FFmpeg/R3.")
+                AppPage.PROJECTS -> PlaceholderScreen("Projetos", "Persistência cross-platform/SAF entra no M3, preservando a v5.23 como referência.")
+                AppPage.LOGS -> PlaceholderScreen("Logs", "Logs de jobs e processamento serão persistidos por operação.")
+                AppPage.FILE_PITCH -> FilePitchScreen()
+                AppPage.SETTINGS -> PlaceholderScreen("Configurações", "Separação Rápida é o padrão Android; demais preferências seguirão a v5.23.")
+                AppPage.SYSTEM -> SystemScreen()
+            }
         }
     }
 }
@@ -767,32 +775,110 @@ private fun SimpleDropdown(
 @Composable
 private fun SystemScreen() {
     val context = LocalContext.current
-    var jobState by remember { mutableStateOf(JobStore(context).load()) }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    val jobStore = remember(context) { JobStore(context) }
+    var jobState by remember { mutableStateOf(jobStore.load()) }
+    var launchError by remember { mutableStateOf<String?>(null) }
+    var modelCandidatePresent by remember {
+        mutableStateOf(BsRoformerModelManager.candidateLooksInstalled(context))
+    }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            jobState = jobStore.load()
+            modelCandidatePresent = BsRoformerModelManager.candidateLooksInstalled(context)
+            delay(500)
+        }
+    }
+
+    val busy = jobState?.state == "RUNNING" || jobState?.state == "CANCELLING"
+
+    Column(
+        Modifier.fillMaxWidth().widthIn(max = 900.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
         Text("Sistema", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Checkpoint Android 6.0.0-alpha1")
-        StatusLine("Domínio v5.23", "Portado")
-        StatusLine("Separação padrão", "Rápida / Demucs")
-        StatusLine("Inspeção WAV", "Nativa")
-        StatusLine("Foreground mediaProcessing", "Implementado")
-        StatusLine("FFmpeg", "Inspeção + preparação/encode do Pitch")
-        StatusLine("Rubber Band R3", "v4.0.0 via NDK/JNI • arm64-v8a")
-        StatusLine("Pitch de Arquivo", "Pipeline R3 integrado ao serviço")
-        StatusLine("Demucs htdemucs_6s", "Runtime + modelo + 6 stems implementados")
-        StatusLine("Homologação Demucs", "CI arm64 aprovada • execução física pendente")
-        OutlinedButton(onClick = {
-            val intent = Intent(context, MediaProcessingService::class.java).setAction(MediaProcessingService.ACTION_SELF_TEST)
-            ContextCompat.startForegroundService(context, intent)
-            jobState = JobStore(context).load()
-        }) { Text("Testar execução em segundo plano") }
-        jobState?.let { Text("Último job: ${it.state} • ${it.progress}% • ${it.message}") }
+        Text(
+            "Diagnóstico do build e dos motores instalados.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Aplicativo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                StatusLine("Versão", BuildConfig.VERSION_NAME)
+                StatusLine("Baseline funcional", "Linux v5.23")
+                StatusLine("Separação padrão", "Rápida / Demucs")
+                StatusLine("ABI inicial", "arm64-v8a")
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Motores", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                StatusLine("Inspeção WAV", "Nativa")
+                StatusLine("FFmpeg", "Áudio / SAF")
+                StatusLine("Rubber Band R3", "v4.0.0 / NDK-JNI")
+                StatusLine("Demucs htdemucs_6s", "Implementado")
+                StatusLine(
+                    "BS-RoFormer-SW",
+                    if (modelCandidatePresent) "PTE presente • SHA validado na execução" else "PTE não instalado",
+                )
+                StatusLine("ExecuTorch", "1.3.1 / XNNPACK")
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Execução em segundo plano",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "Este teste valida Foreground Service, persistência do job, notificação e wake lock sem iniciar DSP.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = {
+                        launchError = null
+                        runCatching {
+                            ContextCompat.startForegroundService(
+                                context,
+                                Intent(context, MediaProcessingService::class.java)
+                                    .setAction(MediaProcessingService.ACTION_SELF_TEST),
+                            )
+                        }.onFailure { error ->
+                            launchError =
+                                "Não foi possível iniciar o teste: " +
+                                    (error.message ?: error::class.java.simpleName)
+                        }
+                    },
+                    enabled = !busy,
+                ) {
+                    Text(if (busy) "Processamento em andamento" else "Testar execução em segundo plano")
+                }
+
+                jobState?.let { job ->
+                    StatusLine("Último job", "${job.state} • ${job.progress}%")
+                    Text(job.message, style = MaterialTheme.typography.bodySmall)
+                }
+                launchError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
     }
 }
 
 @Composable
 private fun StatusLine(name: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(name)
-        Text(value, fontWeight = FontWeight.SemiBold)
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(name, modifier = Modifier.weight(0.48f), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, modifier = Modifier.weight(0.52f), fontWeight = FontWeight.SemiBold)
     }
 }

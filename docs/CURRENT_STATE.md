@@ -131,6 +131,8 @@ O manager implementa `.part`, Content-Length quando disponível, limite de bytes
 
 ## Background/lifecycle
 
+- UI física revisada em tablet Android: tema escuro, modo imersivo e proteção por safe drawing insets entram como requisito da shell Android;
+- o self-test de background foi endurecido para transformar falhas de bootstrap/notificação em estado persistido de erro, evitando exceções não tratadas no processo;
 - `ForegroundService` `mediaProcessing` é proprietário das tarefas pesadas;
 - Activity não é proprietária do job;
 - estado/progresso persistidos em `JobStore`;
@@ -207,11 +209,12 @@ Também permanecem como gates de desenvolvimento:
 
 ## Próximo gate
 
-1. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
-2. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;
-3. resolver a licença de redistribuição do checkpoint/PTE antes de habilitar URL pública;
-4. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
-5. depois seguir Fonte/download e o workflow completo.
+1. validar no tablet real o novo shell escuro/imersivo e repetir o self-test de Foreground Service, capturando `adb logcat` se o sistema ainda interromper o processo;
+2. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
+3. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;
+4. resolver a licença de redistribuição do checkpoint/PTE antes de habilitar URL pública;
+5. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
+6. depois seguir Fonte/download e o workflow completo.
 
 ## Continuidade
 

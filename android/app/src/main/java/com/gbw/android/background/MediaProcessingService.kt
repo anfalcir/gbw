@@ -49,26 +49,56 @@ class MediaProcessingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        when (action) {
-            ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
-            ACTION_SELF_TEST -> startSelfTest()
-            ACTION_FILE_PITCH -> startFilePitch(requireNotNull(intent), flags)
-            ACTION_DEMUCS_QUICK -> startDemucsQuick(requireNotNull(intent), flags)
-            ACTION_BSROFORMER_HIGH_QUALITY ->
-                startBsRoformerHighQuality(requireNotNull(intent), flags)
-            ACTION_BSROFORMER_IMPORT ->
-                startBsRoformerImport(requireNotNull(intent), flags)
-        }
-        return if (
-            action == ACTION_FILE_PITCH ||
-            action == ACTION_DEMUCS_QUICK ||
-            action == ACTION_BSROFORMER_HIGH_QUALITY ||
-            action == ACTION_BSROFORMER_IMPORT
-        ) {
-            START_REDELIVER_INTENT
-        } else {
+        return try {
+            when (action) {
+                ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
+                ACTION_SELF_TEST -> startSelfTest()
+                ACTION_FILE_PITCH -> startFilePitch(requireNotNull(intent), flags)
+                ACTION_DEMUCS_QUICK -> startDemucsQuick(requireNotNull(intent), flags)
+                ACTION_BSROFORMER_HIGH_QUALITY ->
+                    startBsRoformerHighQuality(requireNotNull(intent), flags)
+                ACTION_BSROFORMER_IMPORT ->
+                    startBsRoformerImport(requireNotNull(intent), flags)
+            }
+            if (
+                action == ACTION_FILE_PITCH ||
+                action == ACTION_DEMUCS_QUICK ||
+                action == ACTION_BSROFORMER_HIGH_QUALITY ||
+                action == ACTION_BSROFORMER_IMPORT
+            ) {
+                START_REDELIVER_INTENT
+            } else {
+                START_NOT_STICKY
+            }
+        } catch (error: Exception) {
+            handleStartFailure(action, error)
             START_NOT_STICKY
         }
+    }
+
+    private fun handleStartFailure(action: String?, error: Exception) {
+        val message =
+            "Falha ao iniciar o serviço (" + error::class.java.simpleName + "): " +
+                (error.message ?: "sem detalhe adicional")
+        val current = store.load()
+        if (current != null && (current.state == "RUNNING" || current.state == "CANCELLING")) {
+            store.save(current.copy(state = "ERROR", message = message))
+        } else {
+            store.save(
+                PersistedJob(
+                    id = UUID.randomUUID().toString(),
+                    type = action ?: "service-start",
+                    label = "Execução em segundo plano",
+                    state = "ERROR",
+                    progress = 0,
+                    startedAt = System.currentTimeMillis(),
+                    message = message,
+                )
+            )
+        }
+        releaseWakeLock()
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        stopSelf()
     }
 
     private fun startFilePitch(intent: Intent, startFlags: Int) {
@@ -306,13 +336,13 @@ class MediaProcessingService : Service() {
     private fun finishSuccess(base: PersistedJob, message: String) {
         val success = base.copy(state = "SUCCESS", progress = 100, message = message)
         store.save(success)
-        notificationManager().notify(NOTIFICATION_ID, notification(success))
+        notifySafely(success)
     }
 
     private fun finishError(base: PersistedJob, message: String) {
         val failed = base.copy(state = "ERROR", message = message)
         store.save(failed)
-        notificationManager().notify(NOTIFICATION_ID, notification(failed))
+        notifySafely(failed)
     }
 
     private fun finishCancelledIfRunning(message: String) {
@@ -320,13 +350,13 @@ class MediaProcessingService : Service() {
         if (current?.state == "RUNNING" || current?.state == "CANCELLING") {
             val cancelled = current.copy(state = "CANCELLED", message = message)
             store.save(cancelled)
-            notificationManager().notify(NOTIFICATION_ID, notification(cancelled))
+            notifySafely(cancelled)
         }
     }
 
     private fun finishForegroundJob() {
         releaseWakeLock()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         stopSelf()
     }
 
@@ -337,7 +367,7 @@ class MediaProcessingService : Service() {
             message = message,
         )
         store.save(next)
-        notificationManager().notify(NOTIFICATION_ID, notification(next))
+        notifySafely(next)
     }
 
     private fun startSelfTest() {
@@ -349,7 +379,7 @@ class MediaProcessingService : Service() {
             state = "RUNNING",
             progress = 0,
             startedAt = System.currentTimeMillis(),
-            message = "Iniciando…",
+            message = "Iniciando validação do serviço…",
         )
         store.save(persisted)
         startAsForeground(notification(persisted))
@@ -359,12 +389,23 @@ class MediaProcessingService : Service() {
                 for (p in 1..100) {
                     if (!isActive) return@launch
                     delay(120)
-                    val next = persisted.copy(progress = p, message = "Validando persistência e notificação…")
+                    val next = persisted.copy(
+                        progress = p,
+                        message = "Validando persistência, notificação e wake lock…",
+                    )
                     store.save(next)
-                    notificationManager().notify(NOTIFICATION_ID, notification(next))
+                    notifySafely(next)
                 }
-                store.save(persisted.copy(state = "SUCCESS", progress = 100, message = "Teste concluído"))
+                finishSuccess(persisted, "Teste concluído com sucesso.")
+            } catch (cancelled: CancellationException) {
+                finishCancelledIfRunning("Teste de segundo plano cancelado.")
+            } catch (error: Exception) {
+                val message =
+                    "Falha no teste de segundo plano (" + error::class.java.simpleName + "): " +
+                        (error.message ?: "sem detalhe adicional")
+                store.save(persisted.copy(state = "ERROR", message = message))
             } finally {
+                activeJob = null
                 finishForegroundJob()
             }
         }
@@ -379,7 +420,7 @@ class MediaProcessingService : Service() {
                 message = "$message; finalizando o trecho atual e limpando temporários…",
             )
             store.save(cancelling)
-            notificationManager().notify(NOTIFICATION_ID, notification(cancelling))
+            notifySafely(cancelling)
         }
 
         val job = activeJob
@@ -406,7 +447,9 @@ class MediaProcessingService : Service() {
 
     private fun releaseWakeLock() {
         val current = wakeLock
-        if (current?.isHeld == true) current.release()
+        runCatching {
+            if (current?.isHeld == true) current.release()
+        }
         wakeLock = null
     }
 
@@ -458,6 +501,12 @@ class MediaProcessingService : Service() {
             val channel = NotificationChannel(CHANNEL_ID, "Processamento de áudio", NotificationManager.IMPORTANCE_LOW)
             channel.description = "Tarefas longas do Guitar Backing Wizard"
             notificationManager().createNotificationChannel(channel)
+        }
+    }
+
+    private fun notifySafely(job: PersistedJob) {
+        runCatching {
+            notificationManager().notify(NOTIFICATION_ID, notification(job))
         }
     }
 
