@@ -359,7 +359,7 @@ class MediaProcessingService : Service() {
 
     override fun onTimeout(startId: Int, fgsType: Int) {
         val current = store.load()
-        if (current?.type == "separation-quick") DemucsNative.cancel()
+        if (current != null && SeparationResultFiles.isDemucsType(current.type)) DemucsNative.cancel()
         if (current != null) {
             store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
         }
