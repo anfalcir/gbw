@@ -64,7 +64,6 @@ internal object WorkerExitDiagnostics {
             ApplicationExitInfo.REASON_CRASH_NATIVE -> "crash nativo"
             ApplicationExitInfo.REASON_CRASH -> "crash Java/Kotlin"
             ApplicationExitInfo.REASON_LOW_MEMORY -> "memória baixa"
-            ApplicationExitInfo.REASON_MEMORY_LIMITER -> "limitador de memória"
             ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "uso excessivo de recursos"
             ApplicationExitInfo.REASON_ANR -> "ANR"
             ApplicationExitInfo.REASON_SIGNALED -> "processo sinalizado"
@@ -72,7 +71,6 @@ internal object WorkerExitDiagnostics {
             ApplicationExitInfo.REASON_USER_STOPPED -> "app interrompido pelo usuário"
             ApplicationExitInfo.REASON_PACKAGE_UPDATED -> "processo encerrado por atualização"
             ApplicationExitInfo.REASON_FREEZER -> "encerrado pelo freezer do Android"
-            ApplicationExitInfo.REASON_ANOMALY -> "anomalia de recursos"
             else -> "saída do processo (motivo $reason)"
         }
 
