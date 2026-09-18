@@ -239,6 +239,7 @@ private fun SourceScreen(
     var onlineSearching by remember { mutableStateOf(false) }
     var onlineResults by remember { mutableStateOf<List<RankedSourceCandidate>>(emptyList()) }
     var onlineMessage by remember { mutableStateOf<String?>(null) }
+    var manualSourceUrl by rememberSaveable { mutableStateOf("") }
     val selectedDisplayName = remember(selectedUriText) {
         selectedUriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
     }
@@ -426,6 +427,41 @@ private fun SourceScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+
+                Divider()
+                Text("URL manual", fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(
+                    value = manualSourceUrl,
+                    onValueChange = { manualSourceUrl = it },
+                    label = { Text("Link da fonte") },
+                    placeholder = { Text("https://…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                val manualUri = remember(manualSourceUrl) {
+                    manualSourceUrl.trim()
+                        .takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                        ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                }
+                OutlinedButton(
+                    onClick = {
+                        val uri = manualUri
+                        if (uri == null) {
+                            onlineMessage = "Informe uma URL válida iniciando com http:// ou https://."
+                        } else {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                            }.onFailure { error ->
+                                onlineMessage =
+                                    "Não foi possível abrir a URL: " +
+                                        (error.message ?: "nenhum aplicativo compatível.")
+                            }
+                        }
+                    },
+                    enabled = manualUri != null,
+                ) {
+                    Text("Abrir URL")
                 }
             }
         }
