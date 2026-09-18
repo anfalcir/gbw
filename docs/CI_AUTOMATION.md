@@ -4,56 +4,44 @@
 
 Workflow: `.github/workflows/android-ci.yml`
 
-Fluxo:
-
-```text
-confirmar HEAD
-→ alterar
-→ commit/push
-→ CI automática
-→ inspecionar job/log exato
-→ corrigir somente a causa
-→ CI verde
-→ baixar artifact
-→ validar hash/metadados
-```
-
-Gates atuais:
-1. arquitetura de separação Demucs-only;
-2. máscara do small icon da notificação;
-3. smoke de domínio;
-4. Rubber Band R3 host golden;
-5. checkpoint Demucs fixado por bytes/SHA-256/estrutura;
+Gates:
+1. arquitetura Demucs-only;
+2. small icon;
+3. domínio;
+4. Rubber Band host golden;
+5. checkpoint Demucs;
 6. unit tests;
-7. Android Lint;
+7. lint;
 8. assembleDebug NDK/CMake;
-9. certificado estável de homologação;
-10. bibliotecas nativas esperadas e ausência de runtime de separação não utilizado;
-11. contrato Demucs no APK;
-12. runtime Demucs/OpenBLAS;
-13. classes Java críticas do FFmpeg;
-14. Manifest do worker `:media` + `dataSync`;
-15. build metadata + SHA-256;
-16. artifacts APK/relatórios.
+9. certificado de homologação;
+10. conteúdo nativo do APK;
+11. contrato Demucs-only no APK;
+12. Demucs/OpenBLAS;
+13. FFmpeg Java runtime;
+14. Manifest `:media`;
+15. metadata + SHA-256;
+16. artifacts.
 
-Não usar rerun cego. Abrir o log da etapa que falhou e corrigir a causa.
+Regra: não usar rerun cego. Inspecionar a etapa que falhou.
+
+## Política Demucs atual
+
+- OpenBLAS 0.3.34;
+- default: 1 thread;
+- política interna aceita: 1/2;
+- 4 threads foi rejeitado fisicamente e também removido do gate JNI;
+- um chunk por vez.
 
 ## Assinatura
 
-CI de homologação exige certificado SHA-256:
-
+Homologação:
 `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
 
-Essa chave é somente para testes. Release público deve usar identidade privada separada.
-
-## Linux
-
-O baseline Linux possui validação própria. Trabalho Android não deve alterar `linux/`. Quando houver escrita no Android, auditar o diff e confirmar ausência de arquivos `linux/`.
+Produção deverá usar identidade privada separada.
 
 ## Checkpoint
 
-Candidato Android atual:
-- `6.0.0-alpha9.2-4t`;
-- commit `75adc0c223291fdb40a91d23cc40aa1134cbe60f`;
-- CI #85 / run `35378498398`: SUCCESS;
-- APK SHA-256 `79e1f740b02787f27bbf284fdae4dcbe3e738a211d6997facb7ba18fb628a012`.
+- versão: `6.0.0-alpha10`;
+- commit: `d93d45c11dae72065ba450b83927d5d8bc39ed26`;
+- CI #92 / run `35389966284`: SUCCESS;
+- APK SHA-256: `1e6a692c3eb1b73501219809d371acb3747451dd6bb1a40a53e784eba1574ea4`.

@@ -9,60 +9,80 @@ Branch: `dev/android-6.0`
 - não modificar `linux/`;
 - Separação Android = Demucs `htdemucs_6s`;
 - uma variável de performance por experimento;
-- CI verde não substitui benchmark físico.
+- não trocar chunking antes de medir cada hipótese isoladamente.
 
-## Baseline físico
+## Checkpoint atual
 
-`6.0.0-alpha9.1`, versionCode 10, BLAS 2 threads:
-- commit `5d889e3ec1e8f1ffc3221dc24556ed0adac6d38d`;
-- CI #83 SUCCESS;
-- 1977 s;
-- 1714 MiB;
-- 39 chunks;
-- mediana 45,9 s;
-- máximo 87,3 s;
-- térmico leve;
-- seis stems auditivamente aprovados.
+`6.0.0-alpha10`, versionCode 13.
 
-## 4 threads — rejeitado
+- commit funcional: `d93d45c11dae72065ba450b83927d5d8bc39ed26`
+- CI #92 / run `35389966284`: **SUCCESS**
+- APK: 55,584,817 bytes
+- SHA-256: `1e6a692c3eb1b73501219809d371acb3747451dd6bb1a40a53e784eba1574ea4`
+- assinatura de homologação: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
 
-`6.0.0-alpha9.2-4t`, versionCode 11:
-- CI #85 SUCCESS;
-- 2460 s;
-- 1698 MiB;
-- 39 chunks;
-- mediana 58,8 s;
-- máximo 102,8 s;
-- térmico leve.
+## Performance física homologada
 
-Foi +24,4% mais lento que 2 threads por ganho de memória irrelevante (~16 MiB). Não promover.
+### 1 thread — promovido
+- 1895 s
+- 1712 MiB PSS
+- 39 chunks
+- mediana 48,2 s
+- máximo 51,0 s
+- térmico normal
+- SUCCESS 100%
 
-## Candidato em teste — 1 thread
+### 2 threads — referência anterior
+- 1977 s
+- 1714 MiB
+- mediana 45,9 s
+- máximo 87,3 s
+- térmico leve
+- áudio previamente aprovado
 
-`6.0.0-alpha9.3-1t`, versionCode 12:
-- commit `4e237e8c1b8f9774ad101b018d744a64b9cb1940`;
-- CI #86 / run `35384394744`: SUCCESS;
-- APK 55,470,133 bytes;
-- SHA-256 `dc076f4b88243f65c3ccc8a170a35d32f5160f626f6b83547ae7de7b321a42b7`;
-- BLAS default 1;
-- chunk concurrency 1;
-- mesma assinatura de homologação.
+### 4 threads — rejeitado
+- 2460 s
+- 1698 MiB
+- mediana 58,8 s
+- máximo 102,8 s
+- térmico leve
 
-Instalar por cima do alpha9.2 sem desinstalar.
+Decisão:
+- default = 1 thread;
+- política suportada = 1/2;
+- JNI também rejeita 4;
+- chunk concurrency = 1.
 
-## Assinatura
+Falta apenas confirmação auditiva explícita do resultado 1t/alpha10 para fechar o gate físico de áudio dessa configuração.
 
-SHA-256:
-`6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
+## UX já consolidada
+
+- nome amigável do arquivo SAF;
+- identificadores opacos não são expostos;
+- mensagem “Separação iniciada em segundo plano.” expira;
+- Sistema mostra threads reais;
+- timeout do FGS envia cancelamento ao Demucs corretamente.
+
+## Pesquisa Online
+
+Implementada e validada digitalmente:
+- regras de matching/ranking do Linux 5.23 portadas;
+- Bandcamp discovery provider;
+- Robusta/Máxima;
+- recomendado/score/motivo;
+- URL manual;
+- isolamento de falha entre providers.
+
+Detalhes: `docs/ANDROID_ONLINE_SOURCES.md`.
 
 ## Próxima ação
 
-Repetir a mesma música no alpha9.3-1t e comparar contra o baseline 2t:
-- 1977 s;
-- 1714 MiB;
-- 39 chunks;
-- mediana 45,9 s;
-- máximo 87,3 s;
-- térmico leve.
+Homologar fisicamente o alpha10:
+- atualização por cima;
+- Pesquisa Online Bandcamp;
+- URL manual;
+- nome amigável SAF;
+- BLAS 1 na tela Sistema;
+- spot-check dos seis stems.
 
-Se 1t não trouxer ganho útil, fixar 2t como default definitivo e avançar.
+Depois, continuar M7 e conectar os stems internos à etapa Afinação/Pitch sem regressar o renderer Rubber Band.

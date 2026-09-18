@@ -1,65 +1,72 @@
 # GBW Android 6.x
 
-Aplicativo Android nativo do Guitar Backing Wizard. `linux/` preserva o baseline GBW Linux 5.23.0 e não é alterado pelo desenvolvimento Android.
+Aplicativo Android nativo do Guitar Backing Wizard. O baseline GBW Linux 5.23.0 permanece congelado em `linux/`.
+
+## Checkpoint
+
+`6.0.0-alpha10` / versionCode 13
+
+- commit: `d93d45c11dae72065ba450b83927d5d8bc39ed26`
+- CI #92: SUCCESS
+- APK SHA-256: `1e6a692c3eb1b73501219809d371acb3747451dd6bb1a40a53e784eba1574ea4`
 
 ## Separação
 
-O Android usa exclusivamente Demucs `htdemucs_6s`.
+Android usa exclusivamente Demucs `htdemucs_6s`.
 
 Contrato:
 - float32 estéreo / 44,1 kHz;
-- window 343.980 frames;
+- window 343.980;
 - core 242.550;
 - contexto 50.715 por lado;
 - um chunk por vez;
-- seis stems: drums, bass, other, vocals, guitar, piano.
+- seis stems.
 
 Runtime:
 - demucs.cpp `f1206e9adeea103aef4a636b9e62297cf1f8e34e`;
 - Eigen `dd8c71e62852b2fe429edb6682ac91fd1c578a26`;
 - OpenBLAS 0.3.34 `e0166008be8e466242aa76b2ff75ce3f0fbf574a`;
+- BLAS default 1 thread;
+- política interna 1/2;
 - arm64-v8a.
 
-## Performance física
+## Benchmark físico
 
-Baseline vigente: alpha9.1 / 2 threads:
-- 1977 s;
-- 1714 MiB PSS;
+1 thread venceu no Samsung Galaxy Tab A11+:
+- 1895 s;
+- 1712 MiB PSS;
 - 39 chunks;
-- mediana 45,9 s;
-- máximo 87,3 s;
-- térmico leve;
-- áudio aprovado.
+- mediana 48,2 s;
+- máximo 51,0 s;
+- térmico normal.
 
-4 threads foi rejeitado:
-- 2460 s;
-- 1698 MiB;
-- mediana 58,8 s;
-- máximo 102,8 s;
-- térmico leve.
+2 threads: 1977 s / 1714 MiB.  
+4 threads: 2460 s / 1698 MiB — rejeitado.
 
-Candidato atual: `6.0.0-alpha9.3-1t`, versionCode 12:
-- commit `4e237e8c1b8f9774ad101b018d744a64b9cb1940`;
-- CI #86 SUCCESS;
-- APK SHA-256 `dc076f4b88243f65c3ccc8a170a35d32f5160f626f6b83547ae7de7b321a42b7`.
+## Fonte
+
+- arquivo local via SAF;
+- inspeção/qualidade;
+- Pesquisa Online;
+- Bandcamp discovery;
+- ranking portado do Linux 5.23;
+- profundidade Robusta/Máxima;
+- URL manual;
+- providers isolados de falha.
+
+A aquisição automática de mídia não está acoplada à descoberta.
 
 ## Pitch
 
-Rubber Band R3 4.0.0 via NDK/JNI, com processamento offline e validação de saída.
+Rubber Band R3 4.0.0 via NDK/JNI.
 
 ## Background
 
-Foreground Service no processo `:media`, estado persistido, cancelamento, cleanup e recuperação controlada.
+Foreground Service `:media`, persistência, cancelamento, cleanup e recuperação controlada.
 
-## Homologação
+## Assinatura de homologação
 
-Certificado estável de teste:
+SHA-256:
 `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
 
-Não usar essa identidade em produção.
-
-## CI
-
-A Android CI valida arquitetura, Demucs/modelo, domínio, Rubber Band, unit tests, lint, build NDK, assinatura, runtime nativo, FFmpeg, Manifest, hash e artifacts.
-
-Branch oficial: `dev/android-6.0`.
+Não usar esta chave em produção.
