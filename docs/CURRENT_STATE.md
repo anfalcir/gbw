@@ -22,7 +22,7 @@
 
 ## Android
 
-Linha atual: **6.0.0-alpha3**.
+Linha atual: **6.0.0-alpha4**.
 
 ### Domínio/UI já portados
 
@@ -135,7 +135,9 @@ O manager implementa `.part`, Content-Length quando disponível, limite de bytes
 
 - homologação física do alpha2 confirmou tema escuro, modo imersivo e ausência das sobreposições superior/inferior do Android;
 - o alpha2 isolou o self-test como `InvalidForegroundServiceTypeException`: em Android pré-15 o serviço era promovido com tipo `none`, proibido para targetSdk 36;
-- o alpha3 usa `mediaProcessing` em API 35+ e `dataSync` em API 29–34, declarando ambos os tipos/permissões no manifest; API 28 mantém o caminho legado;
+- a homologação física do alpha3 confirmou que o mesmo M4A deixou de causar crash e passou a ser classificado com ressalva;
+- o alpha3 ainda apresentou `InvalidForegroundServiceTypeException` tanto na Separação Rápida quanto no self-test;
+- o alpha4 padroniza o serviço em `dataSync` para API 29+, mantendo API 28 no caminho legado; `dataSync` cobre o processamento local de arquivos do GBW;
 - seleção não-WAV, incluindo M4A/AAC, usa `MediaExtractor` para inspeção inicial e não executa FFprobe/FFmpeg na UI; a decodificação completa permanece no pipeline controlado;
 - o self-test persiste mensagem amigável e registra a exceção completa no Logcat;
 - `ForegroundService` é proprietário das tarefas pesadas;
@@ -214,8 +216,8 @@ Também permanecem como gates de desenvolvimento:
 
 ## Próximo gate
 
-1. repetir no tablet real o self-test com o alpha3 e confirmar `SUCCESS 100%`;
-2. repetir a seleção do mesmo M4A que derrubava o alpha2 e confirmar inspeção/ressalva sem crash;
+1. repetir no tablet real o self-test com o alpha4 e confirmar `SUCCESS 100%`;
+2. iniciar a Separação Rápida e confirmar que o job sai de `0%` sem erro de tipo FGS;
 3. validar Home/outro app/tela bloqueada com o serviço ativo;
 4. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
 5. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;
