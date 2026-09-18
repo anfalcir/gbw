@@ -248,6 +248,16 @@ Também permanecem como gates de desenvolvimento:
 - projetos/backup/restore cross-platform;
 - hardening, auditoria de licenças, release assinado e homologação final.
 
+## Observação física de UX — ícone persistente da notificação
+
+- no alpha8, durante o Foreground Service, o ícone pequeno persistente aparece como um quadrado sólido/sem identidade visual no Samsung One UI;
+- causa confirmada no recurso atual `android/app/src/main/res/drawable/ic_stat_gbw.xml`: ele contém um retângulo branco opaco `M4,4h16v16h-16z`, que o Android trata como máscara preenchida do `smallIcon`;
+- **correção obrigatória no próximo APK**: substituir por VectorDrawable específico para status/notification, monocromático, sem qualquer fundo opaco e derivado visualmente da logo GBW;
+- preferência visual: silhueta reconhecível da palheta/logo com waveform simplificada em negativo/recorte, mantendo legibilidade real em 24 dp;
+- manter o launcher/adaptive icon separado: não reutilizar o ícone colorido normal como `setSmallIcon`;
+- validar em barra de status e notificação expandida, tema claro/escuro do One UI, estados RUNNING/CANCELLING e demais jobs do mesmo Foreground Service;
+- opcionalmente usar a logo completa como `largeIcon` na notificação expandida, sem alterar o contrato obrigatório do `smallIcon` monocromático.
+
 ## Próximo gate
 
 1. instalar o alpha8 **por cima do alpha7**, sem desinstalar nem limpar dados;
