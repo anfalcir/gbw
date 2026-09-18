@@ -17,7 +17,7 @@ internal object DemucsAudioIo {
         WorkerExitDiagnostics.markPhase(context, "demucs:audio-stage")
         val staged = SafAudioStager.stage(context, inputUri, workDir, "source-input")
         try {
-            WorkerExitDiagostics.markPhase(context, "demucs:audio-ffmpeg")
+            WorkerExitDiagnostics.markPhase(context, "demucs:audio-ffmpeg")
             val command =
                 "-hide_banner -nostdin -y -v error -i ${quote(staged.file.absolutePath)} " +
                     "-map 0:a:0 -vn -ar ${DemucsNative.REQUIRED_SAMPLE_RATE} " +
@@ -28,7 +28,7 @@ internal object DemucsAudioIo {
                 "Falha ao preparar áudio estéreo 44,1 kHz para Demucs.",
             )
 
-            WorkerExitDiagostics.markPhase(context, "demucs:audio-validate")
+            WorkerExitDiagnostics.markPhase(context, "demucs:audio-validate")
             require(output.isFile && output.length() > 44L) {
                 "A preparação do áudio para Demucs não gerou um WAV válido."
             }
