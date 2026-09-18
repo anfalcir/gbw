@@ -26,7 +26,7 @@ Essa separação evita acoplar o GBW a um único serviço ou método de download
 
 O ranking é independente da implementação dos providers.
 
-## Provider atual
+## Providers atuais
 
 ### Bandcamp
 
@@ -37,6 +37,29 @@ O ranking é independente da implementação dos providers.
 - não baixa nem extrai mídia;
 - suporta profundidade Robusta e Máxima;
 - falhas de rede são isoladas pelo coordinator.
+
+### Apple Music / iTunes Search API
+
+`AppleMusicDiscoveryProvider`:
+- consulta o catálogo por artista+música;
+- usa apenas metadados e link da faixa;
+- não consome preview nem baixa mídia;
+- tenta a storefront local e usa US como fallback quando necessário;
+- fornece título, artista, álbum e duração para o ranking.
+
+### Busca ampla
+
+Quando nenhum provider direto resolve a consulta, a UI oferece links de pesquisa equivalentes para:
+- YouTube;
+- SoundCloud;
+- Bandcamp.
+
+Esses links são fallback de descoberta; não são tratados como arquivo de áudio interno.
+
+## Persistência de estado
+
+Artista, música, profundidade e URL manual são mantidos em `SourceSearchViewModel` + `SavedStateHandle`.
+Os resultados permanecem no ViewModel durante mudança de configuração, evitando perda ao alternar retrato/paisagem.
 
 ## Coordinator
 
@@ -57,13 +80,15 @@ A tela Fonte oferece:
 - destaque do primeiro candidato seguro como recomendado;
 - origem, qualidade, score e razão do ranking;
 - botão **Abrir fonte**;
-- URL manual validada para `http://`/`https://`.
+- URL manual validada para `http://`/`https://`;
+- busca ampla por serviço quando necessário;
+- estado preservado durante rotação.
 
 A descoberta online ainda não promove um URL diretamente a áudio interno. O usuário abre a fonte no serviço e, quando possui um arquivo de áudio por um meio permitido pelo serviço, seleciona esse arquivo via SAF.
 
 ## Próximos passos
 
-1. homologar fisicamente a pesquisa Bandcamp no Android;
+1. homologar fisicamente Bandcamp + Apple Music usando `Wolves At The Gate / Enemy`;
 2. adicionar novos providers somente quando o método de descoberta for sustentável;
 3. manter provider e ranking desacoplados;
 4. projetar aquisição/preparação por serviço separadamente;
@@ -80,5 +105,9 @@ Cobertura unitária inclui:
 - consenso de duração;
 - deduplicação/limite;
 - parser Bandcamp;
+- parser Apple Music;
+- fallback BR→US do catálogo Apple;
+- persistência via SavedStateHandle;
+- geração de links de busca ampla;
 - limite Robusta/Máxima;
 - isolamento de falha entre providers.

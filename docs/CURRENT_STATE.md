@@ -11,16 +11,16 @@
 - Separação Android usa exclusivamente Demucs `htdemucs_6s`.
 - Otimizações são medidas com uma variável por benchmark físico.
 
-## Checkpoint consolidado — Android 6.0.0-alpha10
+## Checkpoint consolidado — Android 6.0.0-alpha10.1
 
-- versionCode: `13`
-- commit funcional: `d93d45c11dae72065ba450b83927d5d8bc39ed26`
-- Android CI: **#92 / run 35389966284 — SUCCESS**
-- APK: `55,584,817` bytes
-- SHA-256: `1e6a692c3eb1b73501219809d371acb3747451dd6bb1a40a53e784eba1574ea4`
+- versionCode: `14`
+- commit funcional: `0636575a85f163e6b79a0f6400993484d03b6d36`
+- Android CI: **#94 / run 35392234622 — SUCCESS**
+- APK: `55,617,794` bytes
+- SHA-256: `cd865e34d35e61a5a27706f01a6c771dccb65dedfe8172369c2c54112cdd699a`
 - certificado de homologação SHA-256: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
 
-O alpha10 consolida:
+O alpha10.1 consolida:
 - Demucs-only;
 - BLAS default 1 thread;
 - política interna suportada 1/2 threads;
@@ -31,6 +31,9 @@ O alpha10 consolida:
 - correção de cancelamento nativo em timeout;
 - Pesquisa Online de Fontes com ranking portado do Linux 5.23;
 - Bandcamp discovery provider;
+- Apple Music/iTunes Search API como segundo provider de catálogo;
+- busca ampla por links para YouTube/SoundCloud/Bandcamp;
+- estado da pesquisa persistido em ViewModel + SavedStateHandle para sobreviver a rotação;
 - URL manual;
 - isolamento de falha entre providers.
 
@@ -84,12 +87,15 @@ O teste de 1 thread terminou SUCCESS 100%, com os seis WAVs estruturais esperado
 
 ## Pesquisa Online de Fontes
 
-Implementada no alpha10:
+Implementada no alpha10.1:
 - ranking independente de provider;
 - regras portadas do Linux 5.23;
 - Artista + Música;
 - profundidade Robusta/Máxima;
 - Bandcamp discovery provider;
+- Apple Music/iTunes Search API provider;
+- busca ampla de fallback;
+- estado preservado entre retrato/paisagem;
 - recomendado + score + motivo;
 - URL manual;
 - falha de um provider não derruba a pesquisa.
@@ -98,13 +104,14 @@ Aquisição automática do áudio continua separada por design. A tela abre a fo
 
 ## Próximos gates físicos
 
-No alpha10:
+No alpha10.1:
 1. instalar por cima do alpha9.3 sem limpar dados;
 2. confirmar que o nome da fonte agora é amigável;
-3. pesquisar ao menos uma música via Bandcamp;
-4. testar URL manual;
-5. confirmar tela Sistema com BLAS 1 thread;
-6. fazer spot-check auditivo dos seis stems já gerados ou de uma nova separação;
-7. confirmar ícone de notificação.
+3. pesquisar `Wolves At The Gate / Enemy` e confirmar resultado Apple Music e/ou Bandcamp;
+4. preencher Artista/Música, girar retrato↔paisagem e confirmar que os campos/resultados permanecem;
+5. testar URL manual;
+6. confirmar tela Sistema com BLAS 1 thread;
+7. fazer spot-check auditivo dos seis stems já gerados ou de uma nova separação;
+8. confirmar ícone de notificação.
 
 Depois disso, avançar M7: Fonte → Separação → Afinação/Pitch → Exportação.

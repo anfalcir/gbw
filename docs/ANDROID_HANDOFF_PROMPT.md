@@ -13,12 +13,12 @@ Branch: `dev/android-6.0`
 
 ## Checkpoint atual
 
-`6.0.0-alpha10`, versionCode 13.
+`6.0.0-alpha10.1`, versionCode 14.
 
-- commit funcional: `d93d45c11dae72065ba450b83927d5d8bc39ed26`
-- CI #92 / run `35389966284`: **SUCCESS**
-- APK: 55,584,817 bytes
-- SHA-256: `1e6a692c3eb1b73501219809d371acb3747451dd6bb1a40a53e784eba1574ea4`
+- commit funcional: `0636575a85f163e6b79a0f6400993484d03b6d36`
+- CI #94 / run `35392234622`: **SUCCESS**
+- APK: 55,617,794 bytes
+- SHA-256: `cd865e34d35e61a5a27706f01a6c771dccb65dedfe8172369c2c54112cdd699a`
 - assinatura de homologação: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
 
 ## Performance física homologada
@@ -68,6 +68,9 @@ Falta apenas confirmação auditiva explícita do resultado 1t/alpha10 para fech
 Implementada e validada digitalmente:
 - regras de matching/ranking do Linux 5.23 portadas;
 - Bandcamp discovery provider;
+- Apple Music/iTunes Search API provider;
+- busca ampla YouTube/SoundCloud/Bandcamp;
+- estado da pesquisa persistente em ViewModel + SavedStateHandle;
 - Robusta/Máxima;
 - recomendado/score/motivo;
 - URL manual;
@@ -77,9 +80,10 @@ Detalhes: `docs/ANDROID_ONLINE_SOURCES.md`.
 
 ## Próxima ação
 
-Homologar fisicamente o alpha10:
+Homologar fisicamente o alpha10.1:
 - atualização por cima;
-- Pesquisa Online Bandcamp;
+- Pesquisa `Wolves At The Gate / Enemy`;
+- rotação retrato↔paisagem sem perder os campos/resultados;
 - URL manual;
 - nome amigável SAF;
 - BLAS 1 na tela Sistema;
