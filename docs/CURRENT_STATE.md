@@ -1,6 +1,6 @@
 # GBW — Estado Atual
 
-**Data:** 2026-09-17  
+**Data:** 2026-09-18  
 **Repositório:** `anfalcir/gbw`  
 **Branch consolidada:** `main`  
 **Branch oficial de desenvolvimento Android:** `dev/android-6.0`
@@ -22,7 +22,7 @@
 
 ## Android
 
-Linha atual: **6.0.0-alpha2**.
+Linha atual: **6.0.0-alpha3**.
 
 ### Domínio/UI já portados
 
@@ -133,9 +133,12 @@ O manager implementa `.part`, Content-Length quando disponível, limite de bytes
 
 ## Background/lifecycle
 
-- UI física revisada em tablet Android: tema escuro, modo imersivo e proteção por safe drawing insets entram como requisito da shell Android;
-- o self-test de background foi endurecido para transformar falhas de bootstrap/notificação em estado persistido de erro, evitando exceções não tratadas no processo;
-- `ForegroundService` `mediaProcessing` é proprietário das tarefas pesadas;
+- homologação física do alpha2 confirmou tema escuro, modo imersivo e ausência das sobreposições superior/inferior do Android;
+- o alpha2 isolou o self-test como `InvalidForegroundServiceTypeException`: em Android pré-15 o serviço era promovido com tipo `none`, proibido para targetSdk 36;
+- o alpha3 usa `mediaProcessing` em API 35+ e `dataSync` em API 29–34, declarando ambos os tipos/permissões no manifest; API 28 mantém o caminho legado;
+- seleção não-WAV, incluindo M4A/AAC, usa `MediaExtractor` para inspeção inicial e não executa FFprobe/FFmpeg na UI; a decodificação completa permanece no pipeline controlado;
+- o self-test persiste mensagem amigável e registra a exceção completa no Logcat;
+- `ForegroundService` é proprietário das tarefas pesadas;
 - Activity não é proprietária do job;
 - estado/progresso persistidos em `JobStore`;
 - cancelamento pela UI e notificação;
@@ -211,12 +214,14 @@ Também permanecem como gates de desenvolvimento:
 
 ## Próximo gate
 
-1. validar no tablet real o novo shell escuro/imersivo e repetir o self-test de Foreground Service, capturando `adb logcat` se o sistema ainda interromper o processo;
-2. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
-3. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;
-4. resolver a licença de redistribuição do checkpoint/PTE antes de habilitar URL pública;
-5. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
-6. depois seguir Fonte/download e o workflow completo.
+1. repetir no tablet real o self-test com o alpha3 e confirmar `SUCCESS 100%`;
+2. repetir a seleção do mesmo M4A que derrubava o alpha2 e confirmar inspeção/ressalva sem crash;
+3. validar Home/outro app/tela bloqueada com o serviço ativo;
+4. executar **BS-RoFormer-SW / Alta qualidade** em Android arm64 real com o PTE autoritativo;
+5. medir PSS/RAM, tempo, thermal, bateria, estabilidade, cancelamento e qualidade/seams;
+6. resolver a licença de redistribuição do checkpoint/PTE antes de habilitar URL pública;
+7. implementar Comparar sem duplicar desnecessariamente preparação/I/O;
+8. depois seguir Fonte/download e o workflow completo.
 
 ## Continuidade
 

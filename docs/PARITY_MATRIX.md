@@ -23,7 +23,7 @@
 | WAV 32-bit float saída | sim | padrão | ✅ pipeline |
 | WAV 24-bit / FLAC 24-bit | sim | alternativas | ✅ pipeline |
 | Saída sem parcial corrompido | sim | temporário → validação → SAF | ✅ pipeline; 🟡 providers reais |
-| Tarefa longa em background | desktop N/A | FGS + JobStore + wake lock + redelivery | ✅ implementação; 🟡 lock-screen real |
+| Tarefa longa em background | desktop N/A | API 35+ mediaProcessing; API 29–34 dataSync; JobStore + wake lock + redelivery | ✅ digital + alpha2 diagnóstico; 🟡 reteste alpha3/lock-screen |
 | Cancelamento seguro | sim | UI/notificação + coroutine/native/FFmpeg cleanup | ✅ implementação; 🟡 aparelho |
 | Pouco armazenamento | erro controlado | preflight conservador | ✅ digital |
 | Demucs runtime | htdemucs_6s | `demucs.cpp` C++17/JNI arm64 | ✅ build/contrato; 🟡 aparelho |
