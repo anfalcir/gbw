@@ -71,6 +71,7 @@ import com.gbw.android.domain.OutputFormat
 import com.gbw.android.domain.QualityStatus
 import com.gbw.android.domain.Tunings
 import com.gbw.android.separation.DemucsRuntimeMonitor
+import com.gbw.android.separation.DemucsThreadPolicy
 import com.gbw.android.separation.SeparationResultFiles
 import com.gbw.android.separation.SeparationResultStore
 import com.gbw.android.separation.SeparationStemExporter
@@ -79,6 +80,8 @@ import com.gbw.android.separation.ValidatedSeparationResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+private const val SEPARATION_STARTED_MESSAGE = "Separação iniciada em segundo plano."
 
 private enum class AppPage(val title: String, val group: String) {
     SOURCE("1. Fonte", "PROCESSO"),
@@ -223,6 +226,9 @@ private fun SourceScreen(
     var inspection by remember { mutableStateOf<AudioInspection?>(null) }
     var inspectionError by remember { mutableStateOf<String?>(null) }
     var inspecting by remember { mutableStateOf(false) }
+    val selectedDisplayName = remember(selectedUriText) {
+        selectedUriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -269,7 +275,7 @@ private fun SourceScreen(
                 }
                 if (selectedUriText.isNotBlank()) {
                     Text(
-                        Uri.parse(selectedUriText).lastPathSegment ?: "Arquivo selecionado",
+                        selectedDisplayName ?: "Arquivo selecionado",
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
@@ -328,6 +334,9 @@ private fun SeparationScreen(
     var uriText by rememberSaveable(initialUriText) { mutableStateOf(initialUriText) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
+    val selectedDisplayName = remember(uriText) {
+        uriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
+    }
 
     DisposableEffect(previewPlayer) {
         onDispose { previewPlayer.release() }
@@ -379,6 +388,15 @@ private fun SeparationScreen(
             uriText = uri.toString()
             onUriChanged(uriText)
             resultMessage = null
+        }
+    }
+
+    LaunchedEffect(resultMessage) {
+        if (resultMessage == SEPARATION_STARTED_MESSAGE) {
+            delay(3_500)
+            if (resultMessage == SEPARATION_STARTED_MESSAGE) {
+                resultMessage = null
+            }
         }
     }
 
@@ -446,7 +464,7 @@ private fun SeparationScreen(
                 }
                 if (uriText.isNotBlank()) {
                     Text(
-                        Uri.parse(uriText).lastPathSegment ?: "Arquivo selecionado",
+                        selectedDisplayName ?: "Arquivo selecionado",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -473,7 +491,7 @@ private fun SeparationScreen(
                         context,
                         MediaProcessingService.demucsIntent(context, input),
                     )
-                    resultMessage = "Separação iniciada em segundo plano."
+                    resultMessage = SEPARATION_STARTED_MESSAGE
                 }
             },
             enabled = uriText.isNotBlank() && !appJobBusy,
@@ -975,7 +993,9 @@ private fun SystemScreen() {
                 StatusLine("FFmpeg", "Áudio / SAF")
                 StatusLine("Rubber Band R3", "v4.0.0 / NDK-JNI")
                 StatusLine("Demucs htdemucs_6s", "Implementado")
-                StatusLine("BLAS", "OpenBLAS 0.3.34 • 2 threads padrão")
+                val blasThreads = DemucsThreadPolicy.resolve()
+                val threadWord = if (blasThreads == 1) "thread" else "threads"
+                StatusLine("BLAS", "OpenBLAS 0.3.34 • $blasThreads $threadWord padrão")
             }
         }
 
