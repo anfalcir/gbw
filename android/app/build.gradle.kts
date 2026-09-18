@@ -74,6 +74,11 @@ dependencies {
 
     // Audio-only maintained FFmpegKit fork. Pinned; no dynamic versions.
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:8.1.7")
+    // FFmpegKitConfig initializes Smart Exception classes at runtime. The alpha6
+    // APK proved that the maintained artifact metadata did not place these classes
+    // in the final DEX, so keep both runtime jars explicit and verify them in CI.
+    implementation("com.arthenica:smart-exception-java:0.2.1")
+    implementation("com.arthenica:smart-exception-common:0.2.1")
 
     // Exact runtime used by the pinned BS-RoFormer export toolchain.
     implementation("org.pytorch:executorch-android:1.3.1")
