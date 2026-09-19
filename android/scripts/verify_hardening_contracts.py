@@ -39,7 +39,7 @@ assert "ExistingPeriodicWorkPolicy.UPDATE" in scheduler
 assert "screenWidthDp >= 840" in ui
 assert "ModalNavigationDrawer" in ui
 assert "rememberSaveable" in ui
-assert "schemaVersion in 1..ProjectManifest.CURRENT_SCHEMA_VERSION" in project_json
+assert "rawSchemaVersion in 1..ProjectManifest.CURRENT_SCHEMA_VERSION" in project_json
 
 combined_ui = ui + project_ui + logs_ui
 assert ".clickable(" not in combined_ui
