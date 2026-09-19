@@ -147,6 +147,18 @@ internal fun LogsScreen(embedded: Boolean = false) {
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Text(entry.message.ifBlank { "Sem detalhes adicionais." })
+                    entry.diagnostic?.takeIf { it.isNotBlank() }?.let { diagnostic ->
+                        Text(
+                            "Detalhes técnicos",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            diagnostic,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Text(
                         "Job: " + entry.jobId,
                         style = MaterialTheme.typography.bodySmall,
@@ -225,4 +237,7 @@ private fun formatLogEntry(entry: JobHistoryEntry, project: ProjectManifest?): S
         append("\nProjeto: ").append(projectLabel(entry.projectId, project))
         append("\nJob: ").append(entry.jobId)
         append("\n").append(entry.message.ifBlank { "Sem detalhes adicionais." })
+        entry.diagnostic?.takeIf { it.isNotBlank() }?.let {
+            append("\nDiagnóstico: ").append(it)
+        }
     }

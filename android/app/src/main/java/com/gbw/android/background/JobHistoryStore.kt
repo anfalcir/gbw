@@ -21,6 +21,7 @@ internal data class JobHistoryEntry(
     val updatedAt: Long,
     val projectId: String?,
     val message: String,
+    val diagnostic: String?,
 )
 
 internal object JobHistoryPolicy {
@@ -51,6 +52,7 @@ internal class JobHistoryStore(context: Context) {
                 updatedAt = nowEpochMs,
                 projectId = projectId,
                 message = job.message,
+                diagnostic = job.diagnostic,
             )
             val compact = entries
                 .sortedByDescending { it.updatedAt }
@@ -88,6 +90,7 @@ internal class JobHistoryStore(context: Context) {
                                 if (!json.has("projectId") || json.isNull("projectId")) null
                                 else json.optString("projectId").takeIf { it.isNotBlank() },
                             message = json.optString("message", ""),
+                            diagnostic = json.optString("diagnostic", "").takeIf { it.isNotBlank() },
                         )
                     )
                 }
@@ -116,6 +119,7 @@ internal class JobHistoryStore(context: Context) {
                     .put("updatedAt", entry.updatedAt)
                     .put("projectId", entry.projectId ?: JSONObject.NULL)
                     .put("message", entry.message)
+                    .put("diagnostic", entry.diagnostic ?: JSONObject.NULL)
             )
         }
         FileOutputStream(tempFile).use { output ->

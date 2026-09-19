@@ -17,6 +17,7 @@ data class PersistedJob(
     val progress: Int,
     val startedAt: Long,
     val message: String,
+    val diagnostic: String? = null,
 )
 
 class JobStore(context: Context) {
@@ -98,6 +99,7 @@ class JobStore(context: Context) {
                 progress = json.optInt("progress", 0),
                 startedAt = json.optLong("startedAt", 0L),
                 message = json.optString("message", ""),
+                diagnostic = json.optString("diagnostic", "").takeIf { it.isNotBlank() },
             )
         }.getOrElse {
             val corrupt = File(stateDir, "current_job.corrupt.${System.currentTimeMillis()}.json")
@@ -116,6 +118,7 @@ class JobStore(context: Context) {
                 .put("progress", job.progress)
                 .put("startedAt", job.startedAt)
                 .put("message", job.message)
+                .put("diagnostic", job.diagnostic ?: JSONObject.NULL)
                 .toString()
                 .toByteArray(Charsets.UTF_8)
 
