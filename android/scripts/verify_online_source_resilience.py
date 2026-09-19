@@ -11,6 +11,8 @@ vm = read("app/src/main/java/com/gbw/android/ui/SourceSearchViewModel.kt")
 worker = read("app/src/main/java/com/gbw/android/background/SourcePreparationWorker.kt")
 providers = read("app/src/main/java/com/gbw/android/source/BandcampDiscoveryProvider.kt")
 source_rules = read("app/src/main/java/com/gbw/android/domain/SourceSearch.kt")
+score_bands = read("app/src/main/java/com/gbw/android/domain/SourceScoreBand.kt")
+score_badge = read("app/src/main/java/com/gbw/android/ui/SourceScoreBadge.kt")
 ytdlp = read("app/src/main/java/com/gbw/android/source/YtDlpDiscoveryProvider.kt")
 policy = read("app/src/main/java/com/gbw/android/background/ForegroundServiceTypePolicy.kt")
 manifest = read("app/src/main/AndroidManifest.xml")
@@ -41,6 +43,17 @@ assert "AppleMusicDiscoveryProvider()" not in providers
 assert "APPLE_MUSIC" not in source_rules
 assert ".filter { it.automaticDownloadSupported && !it.previewOnly }" in providers
 assert "result.candidates.filter { it.automaticDownloadSupported && !it.previewOnly }" in vm
+
+# Ranking remains sorted by the real score, and release UX exposes the exact
+# normalized value with a non-color semantic label.
+assert ".thenByDescending { it.score }" in source_rules
+assert "score.coerceIn(0, 100)" in score_bands
+assert "INTERMEDIATE_MIN = 55" in score_bands
+assert "GOOD_MIN = 75" in score_bands
+assert "SourceScoreBadge(candidate.score)" in ui
+assert "contentDescription = accessibility" in score_badge
+for label in ("Baixa", "Intermediária", "Boa"):
+    assert label in score_bands
 
 # One dead/geo-blocked/private YouTube result may not abort the whole search.
 assert "YtDlpDiscoveryResilience.availableOrNull" in ytdlp
