@@ -4,7 +4,9 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.EOFException
 import java.io.File
+import java.io.RandomAccessFile
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -99,4 +101,23 @@ class FloatWavFileTest {
             file.delete()
         }
     }
+
+    @Test(expected = EOFException::class)
+    fun `reader rejects truncated declared audio payload`() {
+        val file = File.createTempFile("gbw-truncated-", ".wav")
+        try {
+            FloatWavWriter(file, 44_100, 2).use { writer ->
+                writer.write(FloatArray(256))
+            }
+            RandomAccessFile(file, "rw").use { raf ->
+                raf.setLength(file.length() - 16L)
+            }
+            FloatWavReader(file).use { reader ->
+                reader.readBlock(128)
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
 }

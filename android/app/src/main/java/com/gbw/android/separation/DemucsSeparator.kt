@@ -3,6 +3,7 @@ package com.gbw.android.separation
 import android.content.Context
 import android.net.Uri
 import android.os.Debug
+import com.gbw.android.audio.AudioStorageBudget
 import com.gbw.android.audio.FloatWavReader
 import com.gbw.android.audio.FloatWavWriter
 import com.gbw.android.background.WorkerExitDiagnostics
@@ -83,6 +84,11 @@ internal object DemucsSeparator {
             WorkerExitDiagnostics.markPhase(context, "demucs:audio-prep")
             val inputInfo = DemucsAudioIo.prepareInput(context, inputUri, preparedInput)
             currentCoroutineContext().ensureActive()
+            AudioStorageBudget.requireAvailable(
+                context.filesDir,
+                AudioStorageBudget.demucsOutputRequiredBytes(inputInfo.frames),
+                "a separação em seis stems",
+            )
             report(14, "Carregando modelo htdemucs_6s…")
             WorkerExitDiagnostics.markPhase(context, "demucs:model-load")
 

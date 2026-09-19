@@ -48,17 +48,19 @@ internal class AutomaticBackupWorker(
             var states = dirtyStore.list()
             if (states.isEmpty()) return
             val now = System.currentTimeMillis()
-            val eligible = states.filter {
-                now - it.lastChangedAtEpochMs >= BackupScheduler.QUIET_WINDOW_MS ||
-                    now - it.dirtySinceEpochMs >= BackupScheduler.MAX_LATENCY_MS
-            }
+            val eligible = BackupCoalescingPolicy.eligible(
+                states,
+                now,
+                BackupScheduler.QUIET_WINDOW_MS,
+                BackupScheduler.MAX_LATENCY_MS,
+            )
             if (eligible.isEmpty()) {
-                val wait = states.minOf {
-                    minOf(
-                        (it.lastChangedAtEpochMs + BackupScheduler.QUIET_WINDOW_MS - now).coerceAtLeast(250L),
-                        (it.dirtySinceEpochMs + BackupScheduler.MAX_LATENCY_MS - now).coerceAtLeast(250L),
-                    )
-                }.coerceAtMost(BackupScheduler.QUIET_WINDOW_MS)
+                val wait = BackupCoalescingPolicy.nextDelayMs(
+                    states,
+                    now,
+                    BackupScheduler.QUIET_WINDOW_MS,
+                    BackupScheduler.MAX_LATENCY_MS,
+                ) ?: return
                 delay(wait)
                 continue
             }

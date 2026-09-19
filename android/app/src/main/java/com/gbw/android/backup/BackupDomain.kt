@@ -43,3 +43,32 @@ object BackupReconciler {
         }
     }
 }
+
+
+internal object BackupCoalescingPolicy {
+    fun eligible(
+        states: List<DirtyProjectState>,
+        nowEpochMs: Long,
+        quietWindowMs: Long,
+        maxLatencyMs: Long,
+    ): List<DirtyProjectState> =
+        states.filter {
+            nowEpochMs - it.lastChangedAtEpochMs >= quietWindowMs ||
+                nowEpochMs - it.dirtySinceEpochMs >= maxLatencyMs
+        }
+
+    fun nextDelayMs(
+        states: List<DirtyProjectState>,
+        nowEpochMs: Long,
+        quietWindowMs: Long,
+        maxLatencyMs: Long,
+    ): Long? {
+        if (states.isEmpty()) return null
+        return states.minOf {
+            minOf(
+                (it.lastChangedAtEpochMs + quietWindowMs - nowEpochMs).coerceAtLeast(250L),
+                (it.dirtySinceEpochMs + maxLatencyMs - nowEpochMs).coerceAtLeast(250L),
+            )
+        }.coerceAtMost(quietWindowMs)
+    }
+}

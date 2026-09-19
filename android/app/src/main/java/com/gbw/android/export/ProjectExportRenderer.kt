@@ -2,6 +2,7 @@ package com.gbw.android.export
 
 import android.content.Context
 import com.gbw.android.audio.AudioExportIo
+import com.gbw.android.audio.AudioStorageBudget
 import com.gbw.android.audio.FloatWavReader
 import com.gbw.android.audio.FloatWavWriter
 import com.gbw.android.domain.OutputFormat
@@ -75,6 +76,11 @@ internal object ProjectExportRenderer {
             }
         }
 
+        AudioStorageBudget.requireAvailable(
+            context.cacheDir,
+            AudioStorageBudget.exportWorkingRequiredBytes(baseInfo.frames),
+            "a exportação",
+        )
         val exportId = "e_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().take(8)
         val stagingRoot = File(context.cacheDir, "project-export-staging/$projectId/$exportId")
         stagingRoot.deleteRecursively()

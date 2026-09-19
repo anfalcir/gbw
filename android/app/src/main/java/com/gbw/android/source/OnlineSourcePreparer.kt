@@ -1,6 +1,7 @@
 package com.gbw.android.source
 
 import android.content.Context
+import com.gbw.android.audio.AudioStorageBudget
 import com.gbw.android.audio.LocalFfmpeg
 import com.gbw.android.domain.SourceProvider
 import kotlinx.coroutines.CancellationException
@@ -64,6 +65,13 @@ object OnlineSourcePreparer {
                 request.expectedDurationSeconds.takeIf { it > 0.0 }
                     ?: inspected.durationSeconds.takeIf { it > 0.0 }
                     ?: 0.0
+            AudioStorageBudget.sourcePrepareRequiredBytes(expectedDuration)?.let { required ->
+                AudioStorageBudget.requireAvailable(
+                    context.filesDir,
+                    required,
+                    "preparar a fonte",
+                )
+            }
 
             // Discovery metadata is advisory only. At acquisition time the format is
             // re-inspected and each retry starts from a clean directory so an expired
