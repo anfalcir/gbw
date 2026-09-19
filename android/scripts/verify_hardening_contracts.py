@@ -15,6 +15,7 @@ ui = read("app/src/main/java/com/gbw/android/ui/GbwApp.kt")
 project_ui = read("app/src/main/java/com/gbw/android/ui/ProjectScreens.kt")
 logs_ui = read("app/src/main/java/com/gbw/android/ui/LogsScreen.kt")
 project_json = read("app/src/main/java/com/gbw/android/project/ProjectJson.kt")
+project_repo = read("app/src/main/java/com/gbw/android/project/ProjectRepository.kt")
 
 assert "AudioStorageBudget.requireAvailable" in demucs
 assert "if (!success) outputDir.deleteRecursively()" in demucs
@@ -25,6 +26,9 @@ assert "if (!published) stagingRoot.deleteRecursively()" in export
 assert "currentCoroutineContext().ensureActive()" in export
 
 assert "AudioStorageBudget.sourcePrepareRequiredBytes" in source
+assert "AudioStorageBudget.sourceCopyRequiredBytes" in project_repo
+assert "AudioStorageBudget.sourcePairCopyRequiredBytes" in project_repo
+assert "querySourceSize" in project_repo
 assert "if (!success) workRoot.deleteRecursively()" in source
 assert "currentCoroutineContext().ensureActive()" in source
 

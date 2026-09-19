@@ -18,6 +18,13 @@ class AudioStorageBudgetTest {
         assertTrue(AudioStorageBudget.exportWorkingRequiredBytes(frames) > frames * 32L)
     }
 
+    @Test fun localSourceBudgetsIncludeAtomicCopyHeadroom() {
+        val one = 250L * 1024L * 1024L
+        val two = 400L * 1024L * 1024L
+        assertTrue(AudioStorageBudget.sourceCopyRequiredBytes(one) > one)
+        assertTrue(AudioStorageBudget.sourcePairCopyRequiredBytes(one, two) > one + two)
+    }
+
     @Test fun sourceBudgetRequiresKnownPositiveDuration() {
         assertNull(AudioStorageBudget.sourcePrepareRequiredBytes(0.0))
         assertNull(AudioStorageBudget.sourcePrepareRequiredBytes(Double.NaN))

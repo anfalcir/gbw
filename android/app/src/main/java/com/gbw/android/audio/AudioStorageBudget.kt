@@ -24,6 +24,15 @@ internal object AudioStorageBudget {
             RESERVE_BYTES,
         )
 
+    fun sourceCopyRequiredBytes(sourceBytes: Long): Long =
+        addSaturated(sourceBytes.coerceAtLeast(0L), RESERVE_BYTES)
+
+    fun sourcePairCopyRequiredBytes(firstBytes: Long, secondBytes: Long): Long =
+        addSaturated(
+            addSaturated(firstBytes.coerceAtLeast(0L), secondBytes.coerceAtLeast(0L)),
+            RESERVE_BYTES,
+        )
+
     fun sourcePrepareRequiredBytes(durationSeconds: Double): Long? {
         if (!durationSeconds.isFinite() || durationSeconds <= 0.0) return null
         val frames = ceil(durationSeconds * SAMPLE_RATE).toLong()

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
+import com.gbw.android.audio.AudioStorageBudget
 import com.gbw.android.backup.BackupDirtyStore
 import com.gbw.android.backup.BackupScheduler
 import com.gbw.android.separation.SeparationResultFiles
@@ -210,6 +211,13 @@ internal class ProjectRepository(context: Context) {
         artist: String = "",
         song: String = "",
     ): ProjectManifest {
+        querySourceSize(uri)?.let { bytes ->
+            AudioStorageBudget.requireAvailable(
+                appContext.filesDir,
+                AudioStorageBudget.sourceCopyRequiredBytes(bytes),
+                "incorporar a fonte local",
+            )
+        }
         val project = active() ?: create(name, artist, song)
         return withProjectLock(project.projectId) {
             val current = load(project.projectId)
@@ -249,6 +257,7 @@ internal class ProjectRepository(context: Context) {
         artist: String = "",
         song: String = "",
     ): ProjectManifest {
+        requirePreparedSourceSpace(record)
         val project = active() ?: create(name, artist, song)
         return adoptPreparedSource(
             projectId = project.projectId,
@@ -272,6 +281,11 @@ internal class ProjectRepository(context: Context) {
         val native = File(record.nativePath)
         val prepared = File(record.preparedPath)
         require(native.isFile && prepared.isFile) { "Fonte preparada legada não está íntegra." }
+        AudioStorageBudget.requireAvailable(
+            appContext.filesDir,
+            AudioStorageBudget.sourcePairCopyRequiredBytes(native.length(), prepared.length()),
+            "incorporar a fonte preparada",
+        )
         val nativeExt = native.extension.lowercase().ifBlank { "bin" }
         val nativeRel = "source/original.$nativeExt"
         val preparedRel = "source/prepared_44100_f32.wav"
@@ -584,6 +598,34 @@ internal class ProjectRepository(context: Context) {
             size = dst.length(),
             sha256 = ProjectHashing.sha256(dst),
             modifiedAtEpochMs = dst.lastModified(),
+        )
+    }
+
+    private fun querySourceSize(uri: Uri): Long? = runCatching {
+        appContext.contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.SIZE),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+            if (cursor.moveToFirst() && index >= 0 && !cursor.isNull(index)) {
+                cursor.getLong(index).takeIf { it > 0L }
+            } else {
+                null
+            }
+        }
+    }.getOrNull()
+
+    private fun requirePreparedSourceSpace(record: PreparedSourceRecord) {
+        val native = File(record.nativePath)
+        val prepared = File(record.preparedPath)
+        if (!native.isFile || !prepared.isFile) return
+        AudioStorageBudget.requireAvailable(
+            appContext.filesDir,
+            AudioStorageBudget.sourcePairCopyRequiredBytes(native.length(), prepared.length()),
+            "incorporar a fonte preparada",
         )
     }
 
