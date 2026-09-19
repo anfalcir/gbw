@@ -1,6 +1,6 @@
 # GBW Android 6.0 — Campanha Final de Homologação Física (R6)
 
-Use exclusivamente o RC gerado a partir do HEAD documentado em docs/CURRENT_STATE.md.
+Use exclusivamente o RC gerado a partir do commit documentado em docs/CURRENT_STATE.md.
 Registre PASS/FAIL e observação para cada linha.
 
 ## Identidade do build
@@ -12,31 +12,46 @@ Registre PASS/FAIL e observação para cada linha.
 ## Instalação e migração
 
 - [ ] instalação limpa;
-- [ ] upgrade sobre alpha anterior;
+- [ ] upgrade sobre RC/alpha anterior compatível com a mesma chave de homologação;
 - [ ] projeto schema antigo abre sem crash;
 - [ ] fonte/separação válidas são preservadas;
 - [ ] export antigo incompatível não reaparece como atual.
 
-## Projetos/sessão
+## Projetos / sessão
 
 - [ ] Projeto A abre corretamente;
 - [ ] fechar projeto limpa Fonte/Separação/Export da sessão;
 - [ ] Projeto B não herda dados do Projeto A;
 - [ ] reabrir A restaura somente dados de A;
 - [ ] busca e agrupamento por artista/música;
-- [ ] duplicação cria UUID distinto.
+- [ ] duplicação cria UUID distinto;
+- [ ] remover/encerrar o GBW pelo multitarefas e abrir novamente inicia sem projeto aberto;
+- [ ] rotação/recriação normal não fecha o projeto;
+- [ ] apenas colocar em background e retornar não fecha o projeto.
 
-## Fonte
+## Fonte local
 
 - [ ] arquivo local;
 - [ ] M4A;
 - [ ] MP3;
 - [ ] FLAC;
 - [ ] WAV;
-- [ ] pesquisa online;
-- [ ] YouTube/download;
+- [ ] erro de fonte aparece perto da ação e também em toast.
+
+## Pesquisa online — regressão RC3 obrigatória
+
+- [ ] iniciar pesquisa e trocar de tela; ao retornar, a pesquisa/resultado permanece coerente;
+- [ ] repetir pesquisa que anteriormente encontrou YouTube;
+- [ ] um resultado YouTube indisponível não encerra toda a busca;
+- [ ] candidatos válidos continuam aparecendo quando outro candidato falha;
+- [ ] Apple Music/iTunes não aparece como resultado;
+- [ ] selecionar candidato recomendado;
+- [ ] iniciar preparação da fonte sem erro de quota/limite de foreground service;
+- [ ] trocar de tela durante a preparação e retornar; tarefa continua;
+- [ ] conclusão publica a fonte no projeto correto;
 - [ ] cancelamento;
-- [ ] erro de rede e tentativa posterior.
+- [ ] erro de rede e tentativa posterior;
+- [ ] avisos/erros aparecem próximos da seção correta e também via toast temporário.
 
 ## Separação
 
@@ -79,13 +94,18 @@ Registre PASS/FAIL e observação para cada linha.
 - [ ] arquivos restaurados conferem;
 - [ ] mudança remota não abre projeto silenciosamente.
 
-## Logs / Sistema / UX
+## Sistema / Histórico / UX
 
-- [ ] logs mostram timestamp/job/projeto/erro;
-- [ ] copiar log;
+- [ ] não existe página principal separada de Logs;
+- [ ] Sistema contém Histórico de atividades;
+- [ ] histórico mostra timestamp/tarefa/projeto/erro quando aplicável;
+- [ ] copiar registro;
 - [ ] limpar histórico;
-- [ ] diagnóstico avançado fica fora do caminho principal;
-- [ ] rotação/recriação;
+- [ ] fluxo principal não mostra referência ao Linux 5.23;
+- [ ] fluxo principal não exibe score interno/provider técnico/estado bruto RUNNING/CANCELLING;
+- [ ] diagnóstico técnico fica recolhido em Sistema;
+- [ ] mensagens importantes aparecem em local contextual;
+- [ ] mensagens importantes também aparecem temporariamente em toast;
 - [ ] telefone;
 - [ ] tablet;
 - [ ] portrait/landscape;

@@ -6,11 +6,12 @@
 - R2 ✅ fechado — Alpha14.
 - R3 ✅ fechado — Alpha15.
 - R4 ✅ fechado — Alpha16 / hardening digital.
-- Candidato atual: 6.0.0-rc2 / versionCode 23 / commit d49a84ad00eaa21328a2742ae0be5caca815d3bd.
-- Android CI #119 / run 35439632899: SUCCESS.
-- APK homologação SHA-256: eb1cfd6b3316a53a8399e69e3df4a141229adeaacd3366bd4f78fac7812cf21c.
-- R5 ⏳ infraestrutura pronta; bloqueado por assinatura privada + compliance/licença.
-- R6 ⏳ campanha física obrigatória.
+- Candidato atual: 6.0.0-rc3 / versionCode 24 / commit 25214623cb886697a0d847a00af7171147bbfa60.
+- Android CI #123 / run 35443092492: SUCCESS.
+- APK homologação SHA-256: eb9fc4ed8a133a4ec04bf3522b3026726a5e5491ea7fa55b1772393714ddae63.
+- RC3 corrige workflow online, quota Android, sessão limpa e polimento final de UX.
+- R5 ⏳ infraestrutura pronta; secrets informados como cadastrados; release final será pessoal/privada.
+- R6 ⏳ campanha física obrigatória do RC3.
 - R7 ⏳ somente após R5 + R6.
 
 
@@ -203,13 +204,14 @@ A navegação principal de Processo será:
 2. **Separação**
 3. **Exportação**
 
-Gerenciamento:
+Biblioteca:
 - Projetos
-- Logs
 
 Aplicativo:
 - Configurações
 - Sistema
+  - Histórico de atividades
+  - Diagnóstico avançado
 
 `Afinação & Pitch` e `Pitch de Arquivo` devem desaparecer completamente do produto final.
 
@@ -439,23 +441,25 @@ Matriz digital e física sem blocker conhecido.
 
 ---
 
-## R5 — M10: Release Candidate
+## R5 — M10: Release Candidate / produção pessoal
 
-Criar `6.0.0-rc1`.
+RC1–RC3 constituem a fase de release candidate. O RC3 é o candidato físico atual.
 
-Obrigatório:
+Decisão de distribuição:
+- o APK final será usado exclusivamente pelo proprietário;
+- não haverá distribuição pública/comercial nesta release;
+- os secrets de assinatura foram informados como cadastrados, mas só o workflow manual poderá validá-los;
+- qualquer distribuição futura a terceiros exige nova auditoria de licenças/direitos antes de publicação.
+
+Obrigatório para fechar R5:
 - assinatura privada de produção;
-- certificado registrado;
+- certificado registrado e diferente da chave pública de homologação;
 - APK reprodutível;
 - SHA-256;
 - release notes;
 - known limitations;
 - matriz final de funcionalidades;
-- auditoria de licenças dos componentes realmente distribuídos;
-- remover documentação obsoleta;
-- consolidar `dev/android-6.0` em `main`.
-
-A auditoria Rubber Band deixa de ser blocker depois de sua remoção total do APK.
+- documentação coerente com o produto real.
 
 ---
 
@@ -463,9 +467,15 @@ A auditoria Rubber Band deixa de ser blocker depois de sua remoção total do AP
 
 Uma única campanha final focada em:
 - instalação limpa;
-- upgrade de alpha/projeto antigo;
+- upgrade de RC/alpha/projeto antigo;
+- nova abertura do app sem projeto automaticamente aberto;
 - Fonte local;
 - Pesquisa Online/YouTube;
+- pesquisa sobrevivendo à troca de tela;
+- candidato YouTube indisponível sendo ignorado sem abortar resultados saudáveis;
+- Apple Music ausente da lista automática;
+- preparo online sem erro de quota foreground dataSync e sobrevivendo à troca de tela;
+- feedback contextual + toast;
 - Separação;
 - previews;
 - Export backing+guitar original;
@@ -559,11 +569,11 @@ O GBW Android 6.0 está concluído quando:
 7. fechar projeto não deixa estado residual;
 8. backup Android automático/manual é robusto e restaurável;
 9. Drive mantém estrutura humana organizada;
-10. Logs e Sistema estão prontos para usuário final;
+10. Sistema e Histórico de atividades estão prontos para usuário final;
 11. lifecycle, stress, erros e acessibilidade passam;
 12. CI e regressão física final passam;
-13. APK RC/final usa assinatura de produção;
-14. licenças dos componentes distribuídos estão fechadas;
+13. APK final usa assinatura de produção;
+14. uso pessoal/privado está documentado e qualquer futura distribuição pública reabre auditoria de licenças/direitos;
 15. documentação final corresponde ao produto real.
 
 ---

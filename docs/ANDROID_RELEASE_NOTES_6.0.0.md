@@ -13,14 +13,15 @@ Fonte → Separação Demucs → Export backing+guitar → Projeto/Backup Androi
 - pesquisa/ranking e aquisição online;
 - separação exclusiva Demucs htdemucs_6s;
 - seis stems: drums, bass, other, vocals, guitar e piano;
-- processamento pesado no processo :media;
-- Foreground Service, notificação, cancelamento e cleanup;
+- processamento pesado de separação/export no processo :media;
+- preparo online persistente via WorkManager, desacoplado da tela;
+- foreground mediaProcessing para tarefas pesadas compatíveis, notificação, cancelamento e cleanup;
 - export original em backing + guitar com shared gain;
 - FLAC 24-bit, WAV 24-bit e WAV float32;
 - projetos com UUID imutável;
 - sessão estritamente vinculada ao projeto ativo;
 - busca/agrupamento de projetos e duplicação com UUID novo;
-- Logs persistentes por job/projeto;
+- histórico persistente por tarefa/projeto dentro de Sistema;
 - Sistema com diagnóstico avançado recolhível;
 - backup Android via SAF/Google Drive, manual e automático;
 - deduplicação, conflito explícito, restore Android e coalescência;
@@ -48,12 +49,20 @@ Projetos Android alpha antigos:
 - export antigo incompatível é invalidado e pode ser regenerado no fluxo original-only;
 - artifacts obsoletos deixam de pertencer ao estado atual e são elegíveis a cleanup.
 
-## Estado do RC
+## RC3
 
-O código RC pode ser homologado com a assinatura pública de teste.
+O RC3 corrige:
+- pesquisa online cancelada ao mudar de tela;
+- falha global causada por um único vídeo YouTube indisponível;
+- resultados Apple Music sem utilidade para aquisição;
+- preparo de fonte bloqueado por quota Android de foreground dataSync;
+- mensagens de erro distantes da ação;
+- reabertura automática do último projeto após encerrar o app;
+- textos técnicos excessivos no fluxo principal;
+- Logs como página separada.
 
-A distribuição de produção permanece condicionada a:
-- chave privada de produção;
-- licença do projeto;
-- fechamento da auditoria de direitos do checkpoint Demucs;
-- campanha física R6.
+O código RC3 pode ser homologado com a assinatura pública de teste.
+
+A release final é destinada exclusivamente ao uso pessoal do proprietário. Antes de qualquer
+distribuição futura a terceiros, requisitos de licenciamento/publicação devem ser reavaliados.
+A campanha física R6 permanece obrigatória antes de gerar o APK final de produção.
