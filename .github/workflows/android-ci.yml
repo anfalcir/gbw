@@ -76,6 +76,10 @@ jobs:
         working-directory: android
         run: python3 scripts/verify_original_only.py
 
+      - name: Release UX architecture gate
+        working-directory: android
+        run: python3 scripts/verify_release_ux.py
+
       - name: Cache pinned Demucs checkpoint
         uses: actions/cache@v4
         with:

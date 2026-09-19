@@ -349,7 +349,7 @@ private fun PageContent(
                     },
                     onCreate = { onNavigate(AppPage.SOURCE) },
                 )
-                AppPage.LOGS -> PlaceholderScreen("Logs", "Logs de jobs e processamento serão persistidos por operação.")
+                AppPage.LOGS -> LogsScreen()
                 AppPage.SETTINGS -> BackupSettingsScreen()
                 AppPage.SYSTEM -> SystemScreen()
             }
@@ -1000,14 +1000,6 @@ private fun OnlineSourceCandidateCard(
 }
 
 @Composable
-private fun PlaceholderScreen(title: String, text: String) {
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text(text)
-    }
-}
-
-@Composable
 private fun SeparationScreen(
     projectSession: Int,
     onGoToSource: () -> Unit,
@@ -1322,39 +1314,28 @@ private fun SeparationResultsCard(
     onTogglePreview: (com.gbw.android.separation.SeparationStem) -> Unit,
     onExport: () -> Unit,
 ) {
+    var showTechnical by rememberSaveable { mutableStateOf(false) }
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Stems disponíveis", fontWeight = FontWeight.SemiBold)
             val durationSeconds = result.record.frames / 44_100.0
+            Text("6 stems prontos", fontWeight = FontWeight.SemiBold)
             Text(
-                "Demucs htdemucs_6s • 6 WAV float32 • 44,1 kHz • ${"%.1f".format(durationSeconds)} s • " +
-                    formatStemBytes(result.totalBytes),
+                "Duração ${"%.1f".format(durationSeconds)} s • 44,1 kHz",
                 style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (result.record.chunkCount > 0) {
-                Text(
-                    "Motor Android otimizado • BLAS ${result.record.blasThreads} threads • ${result.record.chunkCount} trechos • " +
-                        "mediana ${"%.1f".format(result.record.medianChunkMillis / 1_000.0)} s • " +
-                        "máx ${"%.1f".format(result.record.maxChunkMillis / 1_000.0)} s • " +
-                        "térmico ${DemucsRuntimeMonitor.thermalLabel(result.record.maxThermalStatus)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+
             result.stems.forEach { stem ->
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stemPublicLabel(stem.name), fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "${stem.file.name} • ${formatStemBytes(stem.file.length())}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        stemPublicLabel(stem.name),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
                     OutlinedButton(
                         onClick = { onTogglePreview(stem) },
                         enabled = !appJobBusy && !exportBusy,
@@ -1363,15 +1344,50 @@ private fun SeparationResultsCard(
                     }
                 }
             }
+
             Button(onClick = onExport, enabled = !appJobBusy && !exportBusy) {
                 Text(if (exportBusy) "Exportando…" else "Exportar os 6 stems…")
             }
-            Text(
-                "A exportação usa o seletor de pastas do Android e cria seis WAVs " +
-                    "GBW_Demucs_<job>_<stem>.wav. Os arquivos internos continuam preservados.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+            OutlinedButton(onClick = { showTechnical = !showTechnical }) {
+                Text(if (showTechnical) "Ocultar detalhes técnicos" else "Detalhes técnicos")
+            }
+
+            if (showTechnical) {
+                Text(
+                    "Motor: htdemucs_6s • WAV float32 • total ${formatStemBytes(result.totalBytes)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Runtime: ${result.record.runtimeIdentity.ifBlank { "Demucs Android" }}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (result.record.chunkCount > 0) {
+                    Text(
+                        "BLAS ${result.record.blasThreads} thread(s) • ${result.record.chunkCount} trechos • " +
+                            "mediana ${"%.1f".format(result.record.medianChunkMillis / 1_000.0)} s • " +
+                            "máx ${"%.1f".format(result.record.maxChunkMillis / 1_000.0)} s • " +
+                            "térmico ${DemucsRuntimeMonitor.thermalLabel(result.record.maxThermalStatus)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                result.stems.forEach { stem ->
+                    Text(
+                        "${stemPublicLabel(stem.name)}: ${stem.file.name} • ${formatStemBytes(stem.file.length())}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    "A cópia manual dos stems usa o seletor de pastas do Android; os arquivos internos do projeto permanecem preservados.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             exportMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         }
     }
@@ -1448,6 +1464,7 @@ private fun SystemScreen() {
     var workerExitSummary by remember {
         mutableStateOf(WorkerExitDiagnostics.latestSummary(context))
     }
+    var showAdvanced by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (isActive) {
@@ -1465,7 +1482,7 @@ private fun SystemScreen() {
     ) {
         Text("Sistema", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Diagnóstico do build e do runtime DSP.",
+            "Informações do aplicativo e ferramentas de diagnóstico.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -1474,70 +1491,78 @@ private fun SystemScreen() {
                 Text("Aplicativo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 StatusLine("Versão", BuildConfig.VERSION_NAME)
                 StatusLine("Android", "${Build.VERSION.RELEASE} • API ${Build.VERSION.SDK_INT}")
-                StatusLine("Baseline funcional", "Linux v5.23")
                 StatusLine("Separação", "Demucs htdemucs_6s")
-                StatusLine("Worker DSP", ":media isolado")
-                StatusLine("ABI inicial", "arm64-v8a")
+                StatusLine(
+                    "Processamento",
+                    if (busy) "Tarefa em andamento" else "Pronto",
+                )
             }
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Áudio e separação", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                StatusLine("Inspeção WAV", "Nativa")
-                StatusLine("FFmpeg", "Áudio / SAF")
-                StatusLine("Demucs htdemucs_6s", "Implementado")
-                val blasThreads = DemucsThreadPolicy.resolve()
-                val threadWord = if (blasThreads == 1) "thread" else "threads"
-                StatusLine("BLAS", "OpenBLAS 0.3.34 • $blasThreads $threadWord padrão")
-            }
+        OutlinedButton(onClick = { showAdvanced = !showAdvanced }) {
+            Text(if (showAdvanced) "Ocultar diagnóstico avançado" else "Diagnóstico avançado")
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "Execução em segundo plano",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    "Este teste valida Foreground Service, persistência do job, notificação e wake lock sem iniciar DSP.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Button(
-                    onClick = {
-                        launchError = null
-                        runCatching {
-                            ContextCompat.startForegroundService(
-                                context,
-                                Intent(context, MediaProcessingService::class.java)
-                                    .setAction(MediaProcessingService.ACTION_SELF_TEST),
-                            )
-                        }.onFailure { error ->
-                            launchError =
-                                "Não foi possível iniciar o teste: " +
-                                    (error.message ?: error::class.java.simpleName)
-                        }
-                    },
-                    enabled = !busy,
-                ) {
-                    Text(if (busy) "Processamento em andamento" else "Testar execução em segundo plano")
-                }
-
-                jobState?.let { job ->
-                    StatusLine("Último job", "${job.state} • ${job.progress}%")
-                    Text(job.message, style = MaterialTheme.typography.bodySmall)
-                }
-                workerExitSummary?.let {
+        if (showAdvanced) {
+            OutlinedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Última saída do worker: $it",
+                        "Detalhes técnicos",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    StatusLine("Baseline de referência", "Linux v5.23")
+                    StatusLine("Worker", ":media isolado")
+                    StatusLine("ABI", "arm64-v8a")
+                    StatusLine("Inspeção WAV", "Nativa")
+                    StatusLine("FFmpeg", "Áudio / SAF")
+                    val blasThreads = DemucsThreadPolicy.resolve()
+                    val threadWord = if (blasThreads == 1) "thread" else "threads"
+                    StatusLine("OpenBLAS", "0.3.34 • $blasThreads $threadWord")
+
+                    Text(
+                        "Teste do processamento em segundo plano",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "Valida serviço em primeiro plano, persistência da tarefa, notificação e wake lock sem executar separação.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                launchError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error)
+                    Button(
+                        onClick = {
+                            launchError = null
+                            runCatching {
+                                ContextCompat.startForegroundService(
+                                    context,
+                                    Intent(context, MediaProcessingService::class.java)
+                                        .setAction(MediaProcessingService.ACTION_SELF_TEST),
+                                )
+                            }.onFailure { error ->
+                                launchError =
+                                    "Não foi possível iniciar o teste: " +
+                                        (error.message ?: error::class.java.simpleName)
+                            }
+                        },
+                        enabled = !busy,
+                    ) {
+                        Text(if (busy) "Processamento em andamento" else "Executar teste")
+                    }
+
+                    jobState?.let { job ->
+                        StatusLine("Última tarefa", "${job.state} • ${job.progress}%")
+                        Text(job.message, style = MaterialTheme.typography.bodySmall)
+                    }
+                    workerExitSummary?.let {
+                        Text(
+                            "Última saída do worker: $it",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    launchError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }

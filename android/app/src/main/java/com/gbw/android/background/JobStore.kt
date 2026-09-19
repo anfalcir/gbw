@@ -27,11 +27,17 @@ class JobStore(context: Context) {
     private val lockFile = File(stateDir, "current_job.lock")
     private val legacyPrefs =
         appContext.getSharedPreferences("gbw_jobs", Context.MODE_PRIVATE)
+    private val historyStore = JobHistoryStore(appContext)
 
     fun save(job: PersistedJob) {
+        var previous: PersistedJob? = null
         withFileLock {
+            previous = readUnlocked()
             writeUnlocked(job)
             legacyPrefs.edit().clear().commit()
+        }
+        if (JobHistoryPolicy.shouldRecord(previous, job)) {
+            historyStore.record(job)
         }
     }
 
@@ -76,6 +82,7 @@ class JobStore(context: Context) {
                 legacy
             }
         writeUnlocked(migrated)
+        historyStore.record(migrated)
         legacyPrefs.edit().clear().commit()
     }
 
