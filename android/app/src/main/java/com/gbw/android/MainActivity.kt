@@ -25,6 +25,15 @@ internal class ProcessSessionGate {
     }
 }
 
+internal object SessionLaunchPolicy {
+    fun shouldStartClean(
+        firstActivityInProcess: Boolean,
+        hasSavedInstanceState: Boolean,
+        launcherIntent: Boolean,
+    ): Boolean =
+        firstActivityInProcess || (!hasSavedInstanceState && launcherIntent)
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,7 +41,17 @@ class MainActivity : ComponentActivity() {
         // "Projeto aberto" is session state. A new app process starts clean,
         // while rotations/activity recreation inside the same process preserve
         // the current project.
-        if (processSessionGate.beginSession()) {
+        val firstActivityInProcess = processSessionGate.beginSession()
+        val launcherIntent =
+            intent?.action == android.content.Intent.ACTION_MAIN &&
+                intent?.hasCategory(android.content.Intent.CATEGORY_LAUNCHER) == true
+        if (
+            SessionLaunchPolicy.shouldStartClean(
+                firstActivityInProcess = firstActivityInProcess,
+                hasSavedInstanceState = savedInstanceState != null,
+                launcherIntent = launcherIntent,
+            )
+        ) {
             ProjectRepository(applicationContext).closeActive()
         }
 

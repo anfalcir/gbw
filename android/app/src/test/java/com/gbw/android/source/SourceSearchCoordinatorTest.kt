@@ -26,6 +26,7 @@ class SourceSearchCoordinatorTest {
                         uploader = "Wolves At The Gate",
                         url = "https://example.test/enemy",
                         durationSeconds = 220.0,
+                        automaticDownloadSupported = true,
                     )
                 )
         }
