@@ -36,7 +36,13 @@ internal class ProjectRepository(context: Context) {
         projectsRoot.listFiles()
             ?.filter { it.isDirectory && isCanonicalProjectId(it.name) }
             ?.mapNotNull { runCatching { load(it.name) }.getOrNull() }
-            ?.sortedWith(compareByDescending<ProjectManifest> { it.updatedAtEpochMs }.thenBy { it.name.lowercase() })
+            ?.sortedWith(
+                compareBy<ProjectManifest>(
+                    { normalizeProjectText(it.artist).lowercase() },
+                    { normalizeProjectText(it.song).lowercase() },
+                    { it.name.lowercase() },
+                )
+            )
             ?: emptyList()
 
     fun active(): ProjectManifest? {
@@ -44,10 +50,45 @@ internal class ProjectRepository(context: Context) {
         return id.takeIf(::isCanonicalProjectId)?.let { runCatching { load(it) }.getOrNull() }
     }
 
+    fun normalizeStoredMetadata(): Int {
+        var changed = 0
+        list().forEach { project ->
+            val artist = normalizeProjectText(project.artist)
+            val song = normalizeProjectText(project.song)
+            val automatic = automaticProjectName(artist, song)
+            val desiredName = automatic.ifBlank { project.name }
+            if (
+                artist != project.artist ||
+                song != project.song ||
+                desiredName != project.name
+            ) {
+                mutate(project.projectId) {
+                    it.copy(
+                        artist = artist,
+                        song = song,
+                        name = sanitizeProjectName(desiredName),
+                        updatedAtEpochMs = System.currentTimeMillis(),
+                    )
+                }
+                changed += 1
+            }
+        }
+        return changed
+    }
+
     fun setActive(projectId: String): ProjectManifest {
         val project = load(projectId)
         atomicWrite(activeFile, projectId.toByteArray(Charsets.UTF_8))
         return project
+    }
+
+    fun closeActive(): ProjectManifest? {
+        val current = active()
+        if (activeFile.exists() && !activeFile.delete()) {
+            atomicWrite(activeFile, ByteArray(0))
+            activeFile.delete()
+        }
+        return current
     }
 
     fun create(
@@ -82,10 +123,13 @@ internal class ProjectRepository(context: Context) {
 
     fun updateMetadata(projectId: String, artist: String, song: String): ProjectManifest =
         mutate(projectId) {
+            val normalizedArtist = normalizeProjectText(artist)
+            val normalizedSong = normalizeProjectText(song)
+            val automaticName = automaticProjectName(normalizedArtist, normalizedSong)
             it.copy(
-                artist = artist.trim(),
-                song = song.trim(),
-                name = if (it.name == "Projeto sem nome" && song.isNotBlank()) sanitizeProjectName(song) else it.name,
+                artist = normalizedArtist,
+                song = normalizedSong,
+                name = if (automaticName.isNotBlank()) sanitizeProjectName(automaticName) else it.name,
                 updatedAtEpochMs = System.currentTimeMillis(),
             )
         }
@@ -112,17 +156,19 @@ internal class ProjectRepository(context: Context) {
             val dst = projectRoot(duplicate.projectId)
             require(dst.mkdirs())
             copyTree(projectRoot(projectId), dst, skipProjectJson = true)
-            val refreshed = duplicate.copy(
+            val duplicatedState = duplicate.copy(
                 workflowStage = original.workflowStage,
                 source = original.source,
                 separation = original.separation,
                 pitch = original.pitch,
                 export = original.export,
-                inventory = buildInventory(dst),
+            )
+            val refreshed = duplicatedState.copy(
+                inventory = buildInventory(duplicatedState, dst),
             )
             saveUnlocked(refreshed, markDirty = true)
+            cleanupUnreferenced(dst, refreshed.inventory)
         }
-        setActive(duplicate.projectId)
         return load(duplicate.projectId)
     }
 
@@ -173,7 +219,11 @@ internal class ProjectRepository(context: Context) {
                 export = null,
                 updatedAtEpochMs = System.currentTimeMillis(),
             )
-            saveUnlocked(updated.copy(inventory = buildInventory(projectRoot(project.projectId))), markDirty = true)
+            val durable = updated.copy(
+                inventory = buildInventory(updated, projectRoot(project.projectId)),
+            )
+            saveUnlocked(durable, markDirty = true)
+            cleanupUnreferenced(projectRoot(project.projectId), durable.inventory)
             setActive(project.projectId)
             load(project.projectId)
         }
@@ -213,7 +263,11 @@ internal class ProjectRepository(context: Context) {
                 export = null,
                 updatedAtEpochMs = System.currentTimeMillis(),
             )
-            saveUnlocked(updated.copy(inventory = buildInventory(projectRoot(project.projectId))), markDirty = true)
+            val durable = updated.copy(
+                inventory = buildInventory(updated, projectRoot(project.projectId)),
+            )
+            saveUnlocked(durable, markDirty = true)
+            cleanupUnreferenced(projectRoot(project.projectId), durable.inventory)
             setActive(project.projectId)
             load(project.projectId)
         }
@@ -250,7 +304,11 @@ internal class ProjectRepository(context: Context) {
                     export = null,
                     updatedAtEpochMs = System.currentTimeMillis(),
                 )
-                saveUnlocked(updated.copy(inventory = buildInventory(projectRoot(projectId))), markDirty = true)
+                val durable = updated.copy(
+                    inventory = buildInventory(updated, projectRoot(projectId)),
+                )
+                saveUnlocked(durable, markDirty = true)
+                cleanupUnreferenced(projectRoot(projectId), durable.inventory)
                 setActive(projectId)
                 load(projectId)
             } finally {
@@ -282,7 +340,11 @@ internal class ProjectRepository(context: Context) {
             export = exportState,
             updatedAtEpochMs = System.currentTimeMillis(),
         )
-        saveUnlocked(updated.copy(inventory = buildInventory(projectRoot(projectId))), markDirty = true)
+        val durable = updated.copy(
+            inventory = buildInventory(updated, projectRoot(projectId)),
+        )
+        saveUnlocked(durable, markDirty = true)
+        cleanupUnreferenced(projectRoot(projectId), durable.inventory)
         setActive(projectId)
         load(projectId)
     }
@@ -342,16 +404,16 @@ internal class ProjectRepository(context: Context) {
             }
             val loaded = load(expectedProjectId)
             val verified = loaded.copy(
-                inventory = buildInventory(finalRoot),
+                inventory = buildInventory(loaded, finalRoot),
                 lastSyncedRevisionId = revisionId,
             )
             saveUnlocked(verified, markDirty = false)
-            setActive(expectedProjectId)
             load(expectedProjectId)
         }
 
     fun replaceRestoredProject(stagingRoot: File, expectedProjectId: String, revisionId: String): ProjectManifest =
         withProjectLock(expectedProjectId) {
+            val wasActive = active()?.projectId == expectedProjectId
             val manifest = ProjectJson.decode(File(stagingRoot, "project.json").readText(Charsets.UTF_8))
             require(manifest.projectId == expectedProjectId) { "projectId do backup não corresponde ao destino." }
             val currentRoot = projectRoot(expectedProjectId)
@@ -372,12 +434,12 @@ internal class ProjectRepository(context: Context) {
                 }
                 val loaded = load(expectedProjectId)
                 val verified = loaded.copy(
-                    inventory = buildInventory(currentRoot),
+                    inventory = buildInventory(loaded, currentRoot),
                     lastSyncedRevisionId = revisionId,
                 )
                 saveUnlocked(verified, markDirty = false)
                 rollback.deleteRecursively()
-                setActive(expectedProjectId)
+                if (wasActive) setActive(expectedProjectId)
                 load(expectedProjectId)
             } catch (error: Exception) {
                 currentRoot.deleteRecursively()
@@ -393,7 +455,10 @@ internal class ProjectRepository(context: Context) {
             val current = load(projectId)
             val next = transform(current)
             require(next.projectId == current.projectId) { "projectId é imutável" }
-            saveUnlocked(next.copy(inventory = buildInventory(projectRoot(projectId))), markDirty = true)
+            val durable = next.copy(
+                inventory = buildInventory(next, projectRoot(projectId)),
+            )
+            saveUnlocked(durable, markDirty = true)
             load(projectId)
         }
 
@@ -408,23 +473,52 @@ internal class ProjectRepository(context: Context) {
         }
     }
 
-    private fun buildInventory(root: File): List<DurableArtifact> {
-        val durableRoots = listOf("source", "stems", "exports")
-        val artifacts = mutableListOf<DurableArtifact>()
-        durableRoots.forEach { leaf ->
+    private fun buildInventory(project: ProjectManifest, root: File): List<DurableArtifact> {
+        val referenced = linkedSetOf<String>()
+        project.source?.let { source ->
+            referenced += normalizeRelativePath(source.originalRelativePath)
+            source.preparedRelativePath?.let { referenced += normalizeRelativePath(it) }
+        }
+        project.separation?.stems?.values?.forEach {
+            referenced += normalizeRelativePath(it)
+        }
+        project.export?.let { export ->
+            export.artifacts.forEach { referenced += normalizeRelativePath(it.relativePath) }
+            referenced += normalizeRelativePath(export.manifestRelativePath)
+        }
+        return referenced.map { relative ->
+            val file = File(root, relative)
+            require(file.isFile) { "Artefato durável ausente: $relative" }
+            DurableArtifact(
+                relativePath = relative,
+                size = file.length(),
+                sha256 = ProjectHashing.sha256(file),
+                modifiedAtEpochMs = file.lastModified(),
+            )
+        }.sortedBy { it.relativePath }
+    }
+
+    private fun cleanupUnreferenced(root: File, inventory: List<DurableArtifact>) {
+        val keep = inventory.map { normalizeRelativePath(it.relativePath) }.toSet()
+        listOf("source", "stems", "exports").forEach { leaf ->
             val base = File(root, leaf)
-            if (!base.exists()) return@forEach
-            base.walkTopDown().filter { it.isFile && !it.name.endsWith(".tmp") && ".partial" !in it.name }.forEach { file ->
-                val relative = file.relativeTo(root).invariantSeparatorsPath
-                artifacts += DurableArtifact(
-                    relativePath = normalizeRelativePath(relative),
-                    size = file.length(),
-                    sha256 = ProjectHashing.sha256(file),
-                    modifiedAtEpochMs = file.lastModified(),
-                )
+            if (!base.isDirectory) return@forEach
+            base.walkBottomUp().forEach { item ->
+                if (item == base) return@forEach
+                if (item.isFile) {
+                    val relative = item.relativeTo(root).invariantSeparatorsPath
+                    if (
+                        relative !in keep &&
+                        !item.name.endsWith(".tmp") &&
+                        ".partial" !in item.name
+                    ) {
+                        runCatching { item.delete() }
+                    }
+                } else if (item.isDirectory && item.listFiles().isNullOrEmpty()) {
+                    runCatching { item.delete() }
+                }
             }
         }
-        return artifacts.sortedBy { it.relativePath }
     }
 
     private fun snapshotOne(src: File, dst: File, relativePath: String): DurableArtifact {

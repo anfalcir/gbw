@@ -29,6 +29,7 @@ internal object BackupScheduler {
         }
         val minutes = settings.intervalMinutes.coerceAtLeast(15L)
         val request = PeriodicWorkRequestBuilder<AutomaticBackupWorker>(minutes, TimeUnit.MINUTES)
+            .setInputData(Data.Builder().putBoolean(AutomaticBackupWorker.KEY_RECONCILE, true).build())
             .setConstraints(networkConstraint())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .addTag("gbw-backup")
@@ -49,9 +50,23 @@ internal object BackupScheduler {
             .enqueueUniqueWork(DIRTY_NAME, ExistingWorkPolicy.KEEP, request)
     }
 
+    fun enqueueInitialSync(context: Context) {
+        val request = OneTimeWorkRequestBuilder<AutomaticBackupWorker>()
+            .setInputData(Data.Builder().putBoolean(AutomaticBackupWorker.KEY_RECONCILE, true).build())
+            .setConstraints(networkConstraint())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .addTag("gbw-backup")
+            .build()
+        WorkManager.getInstance(context.applicationContext)
+            .enqueueUniqueWork(MANUAL_NAME, ExistingWorkPolicy.REPLACE, request)
+    }
+
     fun enqueueManual(context: Context) {
         val request = OneTimeWorkRequestBuilder<AutomaticBackupWorker>()
-            .setInputData(Data.Builder().putBoolean(AutomaticBackupWorker.KEY_BACKUP_ALL, true).build())
+            .setInputData(Data.Builder()
+                .putBoolean(AutomaticBackupWorker.KEY_BACKUP_ALL, true)
+                .putBoolean(AutomaticBackupWorker.KEY_RECONCILE, true)
+                .build())
             .setConstraints(networkConstraint())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .addTag("gbw-backup")

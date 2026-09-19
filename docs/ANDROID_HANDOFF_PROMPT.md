@@ -1,42 +1,52 @@
-# Handoff — GBW Android
+# Handoff — GBW Android alpha12
 
-Repository: anfalcir/gbw
-Branch: dev/android-6.0
-Baseline Linux: linux/ = GBW Linux 5.23.0, read-only.
+Repo: `anfalcir/gbw`
+Branch: `dev/android-6.0`
+Baseline: `linux/` = GBW Linux 5.23.0, somente leitura.
 
 ## Regras
-- confirmar HEAD remoto antes de escrever;
-- não modificar linux/;
-- não modificar anfalcir/guitarlab quando usado como referência;
-- preservar Demucs-only htdemucs_6s, OpenBLAS default 1 thread, FFmpeg e Rubber Band R3;
-- não reintroduzir BS-RoFormer/PTE/ExecuTorch/PFFFT.
 
-## Arquitetura alpha11
-- project/: UUID/schema/repository/managed source/migração/snapshot;
-- export/: backing+guitar/shared gain/export manifest;
-- backup/: SAF store, revision identity, coordinator, WorkManager e reconciliation;
-- source/: pesquisa/ranking e aquisição yt-dlp endurecida contra HTTP 403.
+- confirmar HEAD antes de escrever;
+- não modificar `linux/`;
+- preservar Demucs-only `htdemucs_6s`;
+- OpenBLAS default 1, política 1/2;
+- preservar FFmpeg e Rubber Band R3;
+- projeto é UUID interno + apresentação automática `Artista - Música`;
+- sync/restore background nunca muda projeto ativo;
+- DocumentsProvider/Drive nunca pode executar operação pesada na Main thread.
 
-## Invariantes
-- rename mantém projectId;
-- duplicate cria projectId novo;
-- SAF local é copiado para source/ gerenciado;
-- jobs e staging não entram no backup;
-- backup inclui fonte + stems + exports;
-- backup não mantém histórico de revisões;
-- commit remoto só é válido após size/SHA-256 + manifest + commit marker;
-- conflito local/Drive nunca sobrescreve silenciosamente;
-- backing contém exatamente cinco stems sem guitar;
-- shared gain é idêntico para backing e guitar;
-- pitch preserva duração/alinhamento.
+## Alpha12
 
-## Download YouTube
-O vídeo de homologação confirmou ranking correto e falha de aquisição com: HTTP Error 403: Forbidden.
-O alpha11 trata isso com formato re-inspecionado na aquisição, atualização NIGHTLY suportada pelo youtubedl-android, retries limitados e clientes isolados: tentativa fresca, android_vr, depois web_embedded. O cancelamento destrói todos os processIds de retry.
+Motivado pelo vídeo físico `132666.mp4`:
+- remove ANR ao escolher destino;
+- label legível do provider/pasta;
+- reconcile inicial via WorkManager;
+- layout Drive v2 humano e categorizado;
+- migração layout alpha11;
+- close project/estado inicial;
+- normalização automática de projeto;
+- ordenação por artista/música;
+- lifecycle terminal de jobs;
+- inventário somente do estado atual;
+- cancelamento cooperativo upload/restore.
 
-## Gates físicos restantes
-1. retestar o download do candidato YouTube em rede real;
-2. selecionar uma pasta Google Drive via SAF e confirmar permissão/visibilidade;
-3. rename sem duplicação remota e coalescência de pequenas mudanças;
-4. reinstalação + seleção da mesma pasta + descoberta/import;
-5. audição final do par backing/guitar.
+## Layout Drive v2
+
+`Projetos/Artista - Música/Fonte`
+`Projetos/Artista - Música/Separacao - Stems`
+`Projetos/Artista - Música/Exports`
+`Projetos/Artista - Música/Projeto`
+
+O UUID fica em `Projeto/project-id.json`.
+
+## Homologação física prioritária
+
+1. conectar a mesma pasta GBW no Google Drive sem ANR;
+2. confirmar label humano;
+3. aguardar sync inicial e confirmar migração do projeto alpha11;
+4. confirmar pastas por banda/música e categorias;
+5. fechar projeto e verificar retorno a “Nenhum projeto aberto”;
+6. abrir novamente em Projetos;
+7. gerar export e verificar que mensagem de processamento desaparece ao terminar;
+8. backup agora e verificar status terminal;
+9. repetir pesquisa/download YouTube já endurecido no alpha11.

@@ -85,19 +85,47 @@ data class ProjectManifest(
             artist: String = "",
             song: String = "",
             nowEpochMs: Long = System.currentTimeMillis(),
-        ): ProjectManifest = ProjectManifest(
-            projectId = UUID.randomUUID().toString(),
-            name = sanitizeProjectName(name),
-            artist = artist.trim(),
-            song = song.trim(),
-            createdAtEpochMs = nowEpochMs,
-            updatedAtEpochMs = nowEpochMs,
-        )
+        ): ProjectManifest {
+            val normalizedArtist = normalizeProjectText(artist)
+            val normalizedSong = normalizeProjectText(song)
+            val automaticName = automaticProjectName(normalizedArtist, normalizedSong)
+            return ProjectManifest(
+                projectId = UUID.randomUUID().toString(),
+                name = sanitizeProjectName(automaticName.ifBlank { name }),
+                artist = normalizedArtist,
+                song = normalizedSong,
+                createdAtEpochMs = nowEpochMs,
+                updatedAtEpochMs = nowEpochMs,
+            )
+        }
     }
 }
 
 fun isCanonicalProjectId(value: String): Boolean =
     runCatching { UUID.fromString(value).toString() == value.lowercase() }.getOrDefault(false)
+
+fun normalizeProjectText(value: String): String {
+    val collapsed = value.trim().replace(Regex("\\s+"), " ")
+    if (collapsed.isBlank()) return ""
+    val lower = collapsed.lowercase()
+    val out = StringBuilder(lower.length)
+    var capitalizeNext = true
+    lower.forEach { ch ->
+        if (ch.isLetter()) {
+            if (capitalizeNext) out.append(ch.titlecase()) else out.append(ch)
+            capitalizeNext = false
+        } else {
+            out.append(ch)
+            capitalizeNext = !ch.isDigit()
+        }
+    }
+    return out.toString()
+}
+
+fun automaticProjectName(artist: String, song: String): String =
+    listOf(normalizeProjectText(artist), normalizeProjectText(song))
+        .filter { it.isNotBlank() }
+        .joinToString(" - ")
 
 fun sanitizeProjectName(value: String): String {
     val cleaned = value.trim().replace(Regex("[\u0000-\u001f]"), " ").replace(Regex("\\s+"), " ")

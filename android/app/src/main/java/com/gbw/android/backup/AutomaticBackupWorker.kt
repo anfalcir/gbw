@@ -20,10 +20,16 @@ internal class AutomaticBackupWorker(
         val settings = settingsStore.load()
         if (settings.treeUri.isNullOrBlank()) return Result.success()
         val backupAll = inputData.getBoolean(KEY_BACKUP_ALL, false)
+        val reconcile = inputData.getBoolean(KEY_RECONCILE, false)
         return try {
             setForeground(foregroundInfo("Preparando backup…"))
-            if (backupAll) {
-                ProjectBackupCoordinator(applicationContext).backup(null)
+            val coordinator = ProjectBackupCoordinator(applicationContext)
+            if (reconcile) {
+                setForeground(foregroundInfo("Sincronizando projetos…"))
+                val summary = coordinator.reconcileExisting()
+                BackupConflictStore(applicationContext).save(summary.conflicts)
+            } else if (backupAll) {
+                coordinator.backup(null)
             } else {
                 runCoalesced()
             }
@@ -92,6 +98,7 @@ internal class AutomaticBackupWorker(
 
     companion object {
         const val KEY_BACKUP_ALL = "backup_all"
+        const val KEY_RECONCILE = "reconcile"
         private const val CHANNEL_ID = "gbw_backup"
         private const val NOTIFICATION_ID = 2401
     }

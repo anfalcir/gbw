@@ -40,6 +40,25 @@ internal class SourceSearchViewModel(
     var message by mutableStateOf<String?>(null)
         private set
 
+    fun syncIdentity(artistValue: String, songValue: String) {
+        updateArtist(artistValue)
+        updateSong(songValue)
+    }
+
+    fun resetSession() {
+        artist = ""
+        song = ""
+        manualUrl = ""
+        selectedUrl = ""
+        searching = false
+        results = emptyList()
+        message = null
+        savedStateHandle[KEY_ARTIST] = ""
+        savedStateHandle[KEY_SONG] = ""
+        savedStateHandle[KEY_MANUAL_URL] = ""
+        savedStateHandle[KEY_SELECTED_URL] = ""
+    }
+
     fun updateArtist(value: String) {
         artist = value
         savedStateHandle[KEY_ARTIST] = value

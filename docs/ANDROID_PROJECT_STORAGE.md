@@ -1,31 +1,69 @@
 # GBW Android — Project Storage Contract
 
-Status: Android 6.0.0-alpha11.
+Status: Android 6.0.0-alpha12 source candidate.
 
-## Identity
-Every project receives a random RFC-4122 UUID at creation. projectId is canonical and immutable.
-- Rename preserves projectId.
-- Duplicate creates a new projectId.
-- Restore of the same remote project preserves projectId.
-- Name, artist, song and folder names are never identity.
+## Identidade e apresentação
 
-## Local layout
-filesDir/projects/<projectId>/ contains project.json, source/, stems/ and exports/.
-Jobs and DSP write to jobs/cache staging first. Only validated artifacts are promoted to the project tree.
-Locks live outside the published tree under state/project-locks/.
+Cada projeto recebe um UUID RFC-4122 aleatório. `projectId` é canônico e imutável.
 
-## project.json
-Schema v1 records identity, metadata, timestamps, workflow stage, managed source provenance, separation metadata, stem relative paths, pitch configuration, export metadata, integrity inventory and lastSyncedRevisionId.
-Portable references are relative to the project root. Writes use temp + fsync + atomic move where supported.
+A identidade exibida segue o comportamento musical do GBW:
+- artista/banda normalizado;
+- música normalizada;
+- nome padrão: `Artista - Música`.
 
-## Managed source
-A SAF source is copied into source/. The external URI is provenance only. Online acquisition preserves the downloaded native file and the prepared 44.1 kHz float WAV when available.
+Nome e pasta são apresentação. UUID continua sendo a identidade usada por persistência/backup.
 
-## Integrity
-Durable source/stem/export files use relative path, size, mtime and SHA-256. SHA-256 remains the strong final content identity.
+## Ciclo de sessão
 
-## Legacy migration
-PreparedSourceStore, SeparationResultStore and jobs/<jobId> remain compatibility inputs. Migration creates one UUID, copies validated artifacts, writes project.json and only then writes an idempotent migration marker.
+Estados possíveis da interface:
+1. nenhum projeto aberto;
+2. projeto aberto;
+3. tarefa ativa ligada ao projeto.
 
-## Validation note
-The alpha11 source gate includes explicit compilation coverage for legacy migration and project-path validation.
+`Fechar projeto`:
+- não exclui o projeto;
+- não apaga source/stems/exports;
+- limpa o active pointer;
+- limpa a fonte/contexto visual da sessão;
+- retorna à página Fonte;
+- restaura o estado “Nenhum projeto aberto”.
+
+Fechamento fica indisponível durante job de mídia RUNNING/CANCELLING.
+
+Restore/import de backup em background nunca abre projeto automaticamente.
+
+## Layout local
+
+```
+filesDir/
+  projects/<projectId>/
+    project.json
+    source/
+    stems/
+    exports/
+  state/
+    active_project.txt
+    project-locks/
+    backup_dirty.json
+```
+
+Jobs/DSP usam staging/cache e só promovem artefatos validados.
+
+## Inventário
+
+O inventário é referencial, não uma varredura cega da pasta.
+
+Somente entram:
+- source original/prepared atualmente referenciado;
+- stems da separação atual;
+- artifacts + manifest do export atual.
+
+Isso evita histórico acidental no backup. Arquivos físicos antigos são removidos somente depois da publicação segura do novo estado.
+
+## Escrita
+
+`project.json` usa temp + fsync + replace atômico quando suportado. Caminhos portáveis são sempre relativos ao project root.
+
+## Migração
+
+O migrador alpha continua idempotente. Na inicialização alpha12, projetos existentes também têm artista/música/nome normalizados quando os metadados necessários já existem.

@@ -38,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.gbw.android.backup.BackupConflict
+import com.gbw.android.backup.BackupConflictStore
+import com.gbw.android.backup.BackupDestination
 import com.gbw.android.backup.BackupDirtyStore
 import com.gbw.android.backup.BackupScheduler
 import com.gbw.android.backup.BackupSettings
@@ -137,10 +139,12 @@ internal fun ProjectsScreen(onOpen: (String) -> Unit) {
                                 }
                             }
                         }) { Text("Abrir") }
-                        OutlinedButton(onClick = {
-                            renameTarget = project
-                            renameText = project.name
-                        }) { Text("Renomear") }
+                        if (project.artist.isBlank() || project.song.isBlank()) {
+                            OutlinedButton(onClick = {
+                                renameTarget = project
+                                renameText = project.name
+                            }) { Text("Renomear") }
+                        }
                         OutlinedButton(onClick = {
                             scope.launch {
                                 runCatching { withContext(Dispatchers.IO) { repo.duplicate(project.projectId) } }
@@ -317,11 +321,26 @@ internal fun ProjectExportScreen() {
     var includePitched by rememberSaveable { mutableStateOf(true) }
     var copyBusy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var handledTerminalJobId by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         while (isActive) {
             project = repo.active()
-            job = jobStore.loadReconciled()
+            val freshJob = jobStore.loadReconciled()
+            job = freshJob
+            if (
+                freshJob?.type == MediaProcessingService.PROJECT_EXPORT_TYPE &&
+                freshJob.state !in setOf("RUNNING", "CANCELLING") &&
+                freshJob.id != handledTerminalJobId
+            ) {
+                handledTerminalJobId = freshJob.id
+                message = when (freshJob.state) {
+                    "SUCCESS" -> "Exportação concluída. Backing + guitar estão prontos."
+                    "CANCELLED" -> "Exportação cancelada. Nenhum arquivo parcial foi mantido."
+                    else -> freshJob.message
+                }
+                project = repo.active()
+            }
             delay(750)
         }
     }
@@ -408,7 +427,7 @@ internal fun ProjectExportScreen() {
             enabled = p.separation != null && !busy && (includeOriginal || includePitched),
         ) { Text(if (busy) "Exportando…" else "Gerar backing + guitar") }
 
-        exportJob?.let { current ->
+        exportJob?.takeIf { it.state == "RUNNING" || it.state == "CANCELLING" }?.let { current ->
             OutlinedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(current.state + " • " + current.progress + "%")
@@ -446,12 +465,14 @@ internal fun ProjectExportScreen() {
 internal fun BackupSettingsScreen() {
     val context = LocalContext.current
     val store = remember(context) { BackupSettingsStore(context) }
-    val coordinator = remember(context) { ProjectBackupCoordinator(context) }
+    val conflictStore = remember(context) { BackupConflictStore(context) }
     val scope = rememberCoroutineScope()
     var settings by remember { mutableStateOf(store.load()) }
     var working by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    var conflicts by remember { mutableStateOf<List<BackupConflict>>(emptyList()) }
+    var conflicts by remember { mutableStateOf(conflictStore.load()) }
+    var dirtyCount by remember { mutableStateOf(0) }
+    var requestedSyncAt by rememberSaveable { mutableStateOf(0L) }
 
     fun persist(next: BackupSettings) {
         settings = next
@@ -459,29 +480,65 @@ internal fun BackupSettingsScreen() {
         runCatching { BackupScheduler.applySettings(context, next) }
     }
 
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            val fresh = store.load()
+            settings = fresh
+            conflicts = conflictStore.load()
+            dirtyCount = withContext(Dispatchers.IO) {
+                BackupDirtyStore(context).list().size
+            }
+            if (requestedSyncAt > 0L && fresh.lastRunEpochMs >= requestedSyncAt) {
+                message = if (fresh.lastError.isNullOrBlank()) {
+                    "Sincronização/backup concluído."
+                } else {
+                    "Falha no backup: " + fresh.lastError
+                }
+                requestedSyncAt = 0L
+            }
+            delay(1000)
+        }
+    }
+
+    LaunchedEffect(settings.treeUri) {
+        val rawUri = settings.treeUri ?: return@LaunchedEffect
+        val descriptor = runCatching {
+            BackupDestination.describe(context, android.net.Uri.parse(rawUri))
+        }.getOrNull() ?: return@LaunchedEffect
+        if (settings.destinationLabel != descriptor.label) {
+            val next = settings.copy(destinationLabel = descriptor.label)
+            store.save(next)
+            settings = next
+        }
+    }
+
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
+        if (uri != null && !working) {
             working = true
+            message = "Validando a pasta escolhida…"
             scope.launch {
                 try {
                     context.contentResolver.takePersistableUriPermission(
                         uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                     )
-                    val remote = SafBackupRemoteStore(context, uri)
-                    remote.probeDestination()
-                    remote.initializeRoot()
+                    val descriptor = BackupDestination.describe(context, uri)
+                    withContext(Dispatchers.IO) {
+                        val remote = SafBackupRemoteStore(context, uri)
+                        remote.probeDestination()
+                        remote.initializeRoot()
+                    }
                     val next = settings.copy(
                         treeUri = uri.toString(),
-                        destinationLabel = uri.lastPathSegment ?: "Pasta selecionada",
+                        destinationLabel = descriptor.label,
                         lastError = null,
                     )
                     persist(next)
-                    val summary = coordinator.reconcileExisting()
-                    conflicts = summary.conflicts
-                    message = "Destino validado • importados " + summary.importedProjects +
-                        " • enviados " + summary.uploadedProjects +
-                        " • conflitos " + summary.conflicts.size
+                    requestedSyncAt = System.currentTimeMillis()
+                    BackupScheduler.enqueueInitialSync(context)
+                    message =
+                        "Destino conectado: ${descriptor.label}. " +
+                        "A sincronização inicial continuará em segundo plano."
                 } catch (e: Exception) {
                     message = e.message ?: "A pasta não pôde ser validada."
                 } finally {
@@ -496,27 +553,81 @@ internal fun BackupSettingsScreen() {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("Configurações", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Backup", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "O backup usa a pasta escolhida pelo Android/Google Drive, mas todas as leituras, " +
+                        "gravações e reconciliações pesadas acontecem fora da interface.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Text(
+                    "Destino: " + (settings.destinationLabel ?: "não conectado"),
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { folderPicker.launch(null) }, enabled = !working) {
+                        Text(
+                            when {
+                                working -> "Validando…"
+                                settings.treeUri == null -> "Escolher pasta…"
+                                else -> "Trocar pasta…"
+                            }
+                        )
+                    }
+                    if (settings.treeUri != null) {
+                        OutlinedButton(
+                            onClick = {
+                                store.disconnect()
+                                runCatching { BackupScheduler.cancelAutomatic(context) }
+                                conflictStore.clear()
+                                settings = store.load()
+                                conflicts = emptyList()
+                                requestedSyncAt = 0L
+                                message = "Destino desconectado. O conteúdo remoto foi preservado."
+                            },
+                            enabled = !working,
+                        ) { Text("Desconectar") }
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Switch(
                         checked = settings.enabled,
                         onCheckedChange = { enabled ->
                             val next = settings.copy(
                                 enabled = enabled,
-                                intervalMinutes = if (enabled && settings.intervalMinutes == 0L) 1440L else settings.intervalMinutes,
+                                intervalMinutes = if (enabled && settings.intervalMinutes == 0L) {
+                                    1440L
+                                } else {
+                                    settings.intervalMinutes
+                                },
                             )
                             persist(next)
                         },
-                        enabled = settings.treeUri != null,
+                        enabled = settings.treeUri != null && !working,
                     )
                     Text("Backup automático")
                 }
+
                 CompactDropdown(
                     "Período",
                     intervalLabel(if (settings.enabled) settings.intervalMinutes else 0L),
-                    listOf("Manual somente", "15 minutos", "1 hora", "6 horas", "12 horas", "24 horas"),
+                    listOf(
+                        "Manual somente",
+                        "15 minutos",
+                        "1 hora",
+                        "6 horas",
+                        "12 horas",
+                        "24 horas",
+                    ),
                 ) { label ->
                     val minutes = intervalValue(label)
                     val next = settings.copy(
@@ -526,33 +637,33 @@ internal fun BackupSettingsScreen() {
                     persist(next)
                 }
 
-                Text("Destino: " + (settings.destinationLabel ?: "não conectado"))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { folderPicker.launch(null) }, enabled = !working) {
-                        Text(if (settings.treeUri == null) "Escolher pasta…" else "Trocar pasta…")
-                    }
-                    if (settings.treeUri != null) {
-                        OutlinedButton(onClick = {
-                            store.disconnect()
-                            runCatching { BackupScheduler.cancelAutomatic(context) }
-                            settings = store.load()
-                            message = "Destino desconectado. O conteúdo remoto foi preservado."
-                        }) { Text("Desconectar") }
-                    }
-                }
                 Button(
                     onClick = {
-                        runCatching { BackupScheduler.enqueueManual(context) }
-                            .onSuccess { message = "Backup solicitado." }
+                        runCatching {
+                            requestedSyncAt = System.currentTimeMillis()
+                            BackupScheduler.enqueueManual(context)
+                        }.onSuccess { message = "Sincronização/backup solicitado em segundo plano." }
                             .onFailure { message = it.message }
                     },
                     enabled = settings.treeUri != null && !working,
                 ) { Text("Backup agora") }
 
-                Text("Pendências: " + BackupDirtyStore(context).list().size)
-                if (settings.lastRunEpochMs > 0) Text("Última execução: " + formatTime(settings.lastRunEpochMs))
-                if (settings.lastSuccessEpochMs > 0) Text("Último sucesso: " + formatTime(settings.lastSuccessEpochMs))
-                settings.lastError?.let { Text("Último erro: " + it, color = MaterialTheme.colorScheme.error) }
+                Text("Pendências locais: " + dirtyCount)
+                if (settings.lastRunEpochMs > 0) {
+                    Text("Última execução: " + formatTime(settings.lastRunEpochMs))
+                }
+                if (settings.lastSuccessEpochMs > 0) {
+                    Text("Último sucesso: " + formatTime(settings.lastSuccessEpochMs))
+                }
+                settings.lastError?.let {
+                    Text("Último erro: $it", color = MaterialTheme.colorScheme.error)
+                }
+
+                Text(
+                    "No Drive: Projetos → Banda - Música → Fonte / Separacao - Stems / Exports / Projeto.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -565,8 +676,9 @@ internal fun BackupSettingsScreen() {
                         Button(onClick = {
                             scope.launch {
                                 try {
-                                    coordinator.resolveKeepLocal(conflict.projectId)
-                                    conflicts = conflicts.filterNot { it.projectId == conflict.projectId }
+                                    ProjectBackupCoordinator(context).resolveKeepLocal(conflict.projectId)
+                                    conflictStore.remove(conflict.projectId)
+                                    conflicts = conflictStore.load()
                                     message = "Versão local mantida."
                                 } catch (e: Exception) {
                                     message = e.message
@@ -576,8 +688,9 @@ internal fun BackupSettingsScreen() {
                         OutlinedButton(onClick = {
                             scope.launch {
                                 try {
-                                    coordinator.resolveUseRemote(conflict.projectId)
-                                    conflicts = conflicts.filterNot { it.projectId == conflict.projectId }
+                                    ProjectBackupCoordinator(context).resolveUseRemote(conflict.projectId)
+                                    conflictStore.remove(conflict.projectId)
+                                    conflicts = conflictStore.load()
                                     message = "Versão do Drive restaurada."
                                 } catch (e: Exception) {
                                     message = e.message

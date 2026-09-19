@@ -89,7 +89,10 @@ import com.gbw.android.source.SourceSearchCoordinator
 import com.gbw.android.source.PreparedSourceStore
 import com.gbw.android.project.LegacyProjectMigrator
 import com.gbw.android.project.ProjectJobLinkStore
+import com.gbw.android.project.ProjectManifest
 import com.gbw.android.project.ProjectRepository
+import com.gbw.android.project.automaticProjectName
+import com.gbw.android.project.normalizeProjectText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -118,15 +121,31 @@ fun GbwApp() {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
             var page by rememberSaveable { mutableStateOf(AppPage.SOURCE.name) }
             var sourceUri by rememberSaveable { mutableStateOf("") }
+            var projectSession by rememberSaveable { mutableStateOf(0) }
+            var activeProject by remember { mutableStateOf<ProjectManifest?>(null) }
+            var shellMessage by remember { mutableStateOf<String?>(null) }
+            var mediaJobBusy by remember { mutableStateOf(false) }
             val context = LocalContext.current
             val projectRepository = remember(context) { ProjectRepository(context) }
+            val shellJobStore = remember(context) { JobStore(context) }
+
             LaunchedEffect(Unit) {
-                withContext(Dispatchers.IO) { LegacyProjectMigrator(context).migrateIfNeeded() }
+                withContext(Dispatchers.IO) {
+                    LegacyProjectMigrator(context).migrateIfNeeded()
+                    projectRepository.normalizeStoredMetadata()
+                }
                 BackupScheduler.applySettings(context, BackupSettingsStore(context).load())
+                activeProject = withContext(Dispatchers.IO) { projectRepository.active() }
                 if (sourceUri.isBlank()) {
                     sourceUri = withContext(Dispatchers.IO) {
-                        projectRepository.active()?.let { projectRepository.projectSourceUri(it.projectId)?.toString() }.orEmpty()
+                        activeProject?.let { projectRepository.projectSourceUri(it.projectId)?.toString() }.orEmpty()
                     }
+                }
+                while (isActive) {
+                    activeProject = withContext(Dispatchers.IO) { projectRepository.active() }
+                    val currentJob = withContext(Dispatchers.IO) { shellJobStore.loadReconciled() }
+                    mediaJobBusy = currentJob?.state == "RUNNING" || currentJob?.state == "CANCELLING"
+                    delay(750)
                 }
             }
             val current = AppPage.valueOf(page)
@@ -137,13 +156,37 @@ fun GbwApp() {
 
             if (wide) {
                 Row(Modifier.fillMaxSize()) {
-                    SideBar(current, onSelect = { page = it.name }, Modifier.width(260.dp).fillMaxHeight())
+                    SideBar(
+                        current = current,
+                        activeProject = activeProject,
+                        projectBusy = mediaJobBusy,
+                        shellMessage = shellMessage,
+                        onSelect = { page = it.name },
+                        onCloseProject = {
+                            if (!mediaJobBusy) {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) { projectRepository.closeActive() }
+                                    sourceUri = ""
+                                    activeProject = null
+                                    projectSession += 1
+                                    page = AppPage.SOURCE.name
+                                    shellMessage = "Projeto fechado. O GBW voltou ao estado inicial."
+                                }
+                            }
+                        },
+                        modifier = Modifier.width(260.dp).fillMaxHeight(),
+                    )
                     Divider(Modifier.fillMaxHeight().width(1.dp))
                     PageContent(
                         page = current,
                         sourceUri = sourceUri,
                         onSourceUriChange = { sourceUri = it },
                         onNavigate = { page = it.name },
+                        projectSession = projectSession,
+                        onProjectContextChanged = {
+                            projectSession += 1
+                            activeProject = projectRepository.active()
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -152,17 +195,42 @@ fun GbwApp() {
                     drawerState = drawerState,
                     drawerContent = {
                         ModalDrawerSheet {
-                            SideBar(current, onSelect = {
-                                page = it.name
-                                scope.launch { drawerState.close() }
-                            }, Modifier.width(300.dp).fillMaxHeight())
+                            SideBar(
+                                current = current,
+                                activeProject = activeProject,
+                                projectBusy = mediaJobBusy,
+                                shellMessage = shellMessage,
+                                onSelect = {
+                                    page = it.name
+                                    scope.launch { drawerState.close() }
+                                },
+                                onCloseProject = {
+                                    if (!mediaJobBusy) {
+                                        scope.launch {
+                                            withContext(Dispatchers.IO) { projectRepository.closeActive() }
+                                            sourceUri = ""
+                                            activeProject = null
+                                            projectSession += 1
+                                            page = AppPage.SOURCE.name
+                                            shellMessage = "Projeto fechado. O GBW voltou ao estado inicial."
+                                            drawerState.close()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.width(300.dp).fillMaxHeight(),
+                            )
                         }
                     },
                 ) {
                     Scaffold(
                         topBar = {
                             TopAppBar(
-                                title = { Text(current.title) },
+                                title = {
+                                    Text(
+                                        activeProject?.let { current.title + " • " + it.name }
+                                            ?: current.title
+                                    )
+                                },
                                 navigationIcon = {
                                     TextButton(onClick = { scope.launch { drawerState.open() } }) { Text("☰") }
                                 }
@@ -174,6 +242,11 @@ fun GbwApp() {
                             sourceUri = sourceUri,
                             onSourceUriChange = { sourceUri = it },
                             onNavigate = { page = it.name },
+                            projectSession = projectSession,
+                            onProjectContextChanged = {
+                                projectSession += 1
+                                activeProject = projectRepository.active()
+                            },
                             modifier = Modifier.padding(padding),
                         )
                     }
@@ -184,11 +257,57 @@ fun GbwApp() {
 }
 
 @Composable
-private fun SideBar(current: AppPage, onSelect: (AppPage) -> Unit, modifier: Modifier = Modifier) {
+private fun SideBar(
+    current: AppPage,
+    activeProject: ProjectManifest?,
+    projectBusy: Boolean,
+    shellMessage: String?,
+    onSelect: (AppPage) -> Unit,
+    onCloseProject: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val scroll = rememberScrollState()
     Column(modifier.padding(16.dp).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("GBW", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Android ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(10.dp))
+        if (activeProject == null) {
+            Text(
+                "Nenhum projeto aberto",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "Comece pela Fonte ou abra um projeto.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                "PROJETO ABERTO",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                activeProject.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            OutlinedButton(
+                onClick = onCloseProject,
+                enabled = !projectBusy,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            ) {
+                Text(if (projectBusy) "Tarefa em andamento" else "Fechar projeto")
+            }
+        }
+        shellMessage?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         var lastGroup = ""
         AppPage.entries.forEach { page ->
@@ -214,6 +333,8 @@ private fun PageContent(
     sourceUri: String,
     onSourceUriChange: (String) -> Unit,
     onNavigate: (AppPage) -> Unit,
+    projectSession: Int,
+    onProjectContextChanged: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -226,6 +347,7 @@ private fun PageContent(
                     selectedUriText = sourceUri,
                     onSelectedUri = onSourceUriChange,
                     onContinue = { onNavigate(AppPage.SEPARATION) },
+                    projectSession = projectSession,
                 )
                 AppPage.SEPARATION -> SeparationScreen(
                     initialUriText = sourceUri,
@@ -235,6 +357,7 @@ private fun PageContent(
                 AppPage.EXPORT -> ProjectExportScreen()
                 AppPage.PROJECTS -> ProjectsScreen { uri ->
                     onSourceUriChange(uri)
+                    onProjectContextChanged()
                     onNavigate(AppPage.SOURCE)
                 }
                 AppPage.LOGS -> PlaceholderScreen("Logs", "Logs de jobs e processamento serão persistidos por operação.")
@@ -251,6 +374,7 @@ private fun SourceScreen(
     selectedUriText: String,
     onSelectedUri: (String) -> Unit,
     onContinue: () -> Unit,
+    projectSession: Int,
 ) {
     val context = LocalContext.current
     var inspection by remember { mutableStateOf<AudioInspection?>(null) }
@@ -266,9 +390,19 @@ private fun SourceScreen(
     var sourceJobState by remember { mutableStateOf(sourceJobStore.loadReconciled()) }
     var incorporatingLocal by remember { mutableStateOf(false) }
     var consumedPreparedJobId by rememberSaveable { mutableStateOf("") }
+    var handledSourceTerminalJobId by rememberSaveable { mutableStateOf("") }
     var autoContinuePrepared by rememberSaveable { mutableStateOf(false) }
     val selectedDisplayName = remember(selectedUriText) {
         selectedUriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
+    }
+
+    LaunchedEffect(projectSession) {
+        val active = withContext(Dispatchers.IO) { projectRepository.active() }
+        if (active == null) {
+            searchState.resetSession()
+        } else {
+            searchState.syncIdentity(active.artist, active.song)
+        }
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -312,11 +446,26 @@ private fun SourceScreen(
                         consumedPreparedJobId = job.id
                         autoContinuePrepared = true
                         onSelectedUri(managedUri)
+                        handledSourceTerminalJobId = job.id
                         searchState.updateMessage("Fonte online incorporada ao projeto e preparada com sucesso.")
                     } catch (error: Exception) {
+                        handledSourceTerminalJobId = job.id
                         searchState.updateMessage(error.message ?: "Falha ao incorporar a fonte ao projeto.")
                     }
+                } else {
+                    consumedPreparedJobId = job.id
+                    handledSourceTerminalJobId = job.id
+                    searchState.updateMessage(
+                        "A preparação terminou, mas o arquivo preparado não foi encontrado. Tente novamente."
+                    )
                 }
+            } else if (
+                job?.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
+                job.state !in setOf("RUNNING", "CANCELLING", "SUCCESS") &&
+                job.id != handledSourceTerminalJobId
+            ) {
+                handledSourceTerminalJobId = job.id
+                searchState.updateMessage(job.message)
             }
             delay(750)
         }
@@ -421,18 +570,33 @@ private fun SourceScreen(
 
                 Button(
                     onClick = {
-                        val song = searchState.song.trim()
+                        val artist = normalizeProjectText(searchState.artist)
+                        val song = normalizeProjectText(searchState.song)
                         if (song.isBlank()) {
                             searchState.updateMessage("Informe o nome da música.")
                         } else {
+                            searchState.syncIdentity(artist, song)
                             searchState.beginSearch()
                             val request = SourceSearchRequest(
-                                artist = searchState.artist.trim(),
+                                artist = artist,
                                 song = song,
                                 depth = SourceSearchDepth.valueOf(searchState.depthName),
                             )
                             onlineScope.launch {
                                 try {
+                                    withContext(Dispatchers.IO) {
+                                        val currentProject = projectRepository.active()
+                                            ?: projectRepository.create(
+                                                name = automaticProjectName(artist, song),
+                                                artist = artist,
+                                                song = song,
+                                            )
+                                        projectRepository.updateMetadata(
+                                            currentProject.projectId,
+                                            artist,
+                                            song,
+                                        )
+                                    }
                                     searchState.completeSearch(onlineCoordinator.search(request))
                                 } catch (error: Exception) {
                                     searchState.failSearch(error)
@@ -532,7 +696,10 @@ private fun SourceScreen(
                     }
                 }
 
-                sourceJobState?.takeIf { it.type == MediaProcessingService.SOURCE_PREPARE_TYPE }?.let { job ->
+                sourceJobState?.takeIf {
+                    it.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
+                        it.state in setOf("RUNNING", "CANCELLING")
+                }?.let { job ->
                     OutlinedCard(Modifier.fillMaxWidth()) {
                         Column(
                             Modifier.padding(12.dp),
@@ -1013,7 +1180,9 @@ private fun SeparationScreen(
             Text(if (startingSeparation) "Preparando…" else "Separar")
         }
 
-        separationJob?.let { job ->
+        separationJob?.takeIf {
+            it.state == "RUNNING" || it.state == "CANCELLING"
+        }?.let { job ->
             OutlinedCard(Modifier.fillMaxWidth()) {
                 Column(
                     Modifier.padding(14.dp),
@@ -1174,6 +1343,7 @@ private fun FilePitchScreen() {
     var cautionAcceptedForRun by rememberSaveable { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
+    var handledPitchTerminalJobId by rememberSaveable { mutableStateOf("") }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -1229,7 +1399,20 @@ private fun FilePitchScreen() {
 
     LaunchedEffect(Unit) {
         while (isActive) {
-            jobState = jobStore.loadReconciled()
+            val freshJob = jobStore.loadReconciled()
+            jobState = freshJob
+            if (
+                freshJob?.type == "file-pitch" &&
+                freshJob.state !in setOf("RUNNING", "CANCELLING") &&
+                freshJob.id != handledPitchTerminalJobId
+            ) {
+                handledPitchTerminalJobId = freshJob.id
+                resultMessage = when (freshJob.state) {
+                    "SUCCESS" -> "Pitch concluído com sucesso."
+                    "CANCELLED" -> "Processamento cancelado."
+                    else -> freshJob.message
+                }
+            }
             delay(500)
         }
     }
@@ -1361,7 +1544,9 @@ private fun FilePitchScreen() {
             else chooseOutput(false)
         }, enabled = canApply) { Text("Aplicar pitch") }
 
-        pitchJob?.let { job ->
+        pitchJob?.takeIf {
+            it.state == "RUNNING" || it.state == "CANCELLING"
+        }?.let { job ->
             OutlinedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Processamento", fontWeight = FontWeight.SemiBold)

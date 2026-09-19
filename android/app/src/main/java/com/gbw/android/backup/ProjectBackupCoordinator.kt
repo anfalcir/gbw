@@ -6,6 +6,8 @@ import com.gbw.android.project.ProjectHashing
 import com.gbw.android.project.ProjectRepository
 import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 internal data class BackupSummary(
     val uploadedProjects: Int,
@@ -28,7 +30,8 @@ internal class ProjectBackupCoordinator(context: Context) {
     private val settingsStore = BackupSettingsStore(appContext)
     private val deletionStore = ProjectDeletionStore(appContext)
 
-    suspend fun backup(projectIds: Set<String>? = null): BackupSummary = BackupOperationLock.withLock {
+    suspend fun backup(projectIds: Set<String>? = null): BackupSummary = withContext(Dispatchers.IO) {
+        BackupOperationLock.withLock {
         val settings = settingsStore.load()
         val treeUri = settings.treeUri?.takeIf { it.isNotBlank() }?.let(Uri::parse)
             ?: error("Escolha uma pasta de backup primeiro.")
@@ -48,10 +51,12 @@ internal class ProjectBackupCoordinator(context: Context) {
                 snapshot.root.deleteRecursively()
             }
         }
-        BackupSummary(uploadedProjects = uploaded)
+            BackupSummary(uploadedProjects = uploaded)
+        }
     }
 
-    suspend fun reconcileExisting(): BackupSummary = BackupOperationLock.withLock {
+    suspend fun reconcileExisting(): BackupSummary = withContext(Dispatchers.IO) {
+        BackupOperationLock.withLock {
         val settings = settingsStore.load()
         val treeUri = settings.treeUri?.takeIf { it.isNotBlank() }?.let(Uri::parse)
             ?: error("Escolha uma pasta de backup primeiro.")
@@ -111,10 +116,14 @@ internal class ProjectBackupCoordinator(context: Context) {
                 )
             }
         }
-        BackupSummary(uploaded, imported, downloaded, conflicts)
+            val summary = BackupSummary(uploaded, imported, downloaded, conflicts)
+            BackupConflictStore(appContext).save(conflicts)
+            summary
+        }
     }
 
-    suspend fun resolveKeepLocal(projectId: String) = BackupOperationLock.withLock {
+    suspend fun resolveKeepLocal(projectId: String) = withContext(Dispatchers.IO) {
+        BackupOperationLock.withLock {
         val tree = settingsStore.load().treeUri?.let(Uri::parse) ?: error("Destino ausente")
         val remote = SafBackupRemoteStore(appContext, tree)
         val snapshot = repo.createSnapshot(projectId)
@@ -122,27 +131,38 @@ internal class ProjectBackupCoordinator(context: Context) {
             val committed = remote.uploadSnapshot(snapshot)
             repo.setLastSynced(projectId, committed.revisionId)
             dirty.markBackedUp(projectId, committed.revisionId)
+            BackupConflictStore(appContext).remove(projectId)
         } finally { snapshot.root.deleteRecursively() }
+        }
     }
 
-    suspend fun resolveUseRemote(projectId: String) = BackupOperationLock.withLock {
+    suspend fun resolveUseRemote(projectId: String) = withContext(Dispatchers.IO) {
+        BackupOperationLock.withLock {
         val tree = settingsStore.load().treeUri?.let(Uri::parse) ?: error("Destino ausente")
         val remote = SafBackupRemoteStore(appContext, tree)
         val revision = remote.scanValid().firstOrNull { it.projectId == projectId }
             ?: error("Projeto não encontrado no backup.")
-        restoreReplace(remote, revision)
+            restoreReplace(remote, revision)
+            BackupConflictStore(appContext).remove(projectId)
+        }
     }
 
-    suspend fun deleteLocalOnly(projectId: String) = BackupOperationLock.withLock {
+    suspend fun deleteLocalOnly(projectId: String) = withContext(Dispatchers.IO) {
+        BackupOperationLock.withLock {
         deletionStore.ignore(projectId)
-        repo.deleteLocal(projectId)
+            repo.deleteLocal(projectId)
+            BackupConflictStore(appContext).remove(projectId)
+        }
     }
 
-    suspend fun deleteLocalAndRemote(projectId: String) = BackupOperationLock.withLock {
+    suspend fun deleteLocalAndRemote(projectId: String) = withContext(Dispatchers.IO) {
+        BackupOperationLock.withLock {
         val tree = settingsStore.load().treeUri?.let(Uri::parse)
         if (tree != null) SafBackupRemoteStore(appContext, tree).deleteProject(projectId)
         deletionStore.clear(projectId)
-        repo.deleteLocal(projectId)
+            repo.deleteLocal(projectId)
+            BackupConflictStore(appContext).remove(projectId)
+        }
     }
 
     private suspend fun restoreNew(store: SafBackupRemoteStore, remote: RemoteRevision) {
