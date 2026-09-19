@@ -80,7 +80,7 @@ internal object DemucsSeparator {
             peakPssKb = maxOf(peakPssKb, Debug.getPss())
             WorkerExitDiagnostics.markPhase(context, "demucs:model-ready")
 
-            report(11, "Preparando áudio estéreo 44,1 kHz para htdemucs_6s…")
+            report(11, "Preparando o áudio…")
             WorkerExitDiagnostics.markPhase(context, "demucs:audio-prep")
             val inputInfo = DemucsAudioIo.prepareInput(context, inputUri, preparedInput)
             currentCoroutineContext().ensureActive()
@@ -89,7 +89,7 @@ internal object DemucsSeparator {
                 AudioStorageBudget.demucsOutputRequiredBytes(inputInfo.frames),
                 "a separação em seis stems",
             )
-            report(14, "Carregando modelo htdemucs_6s…")
+            report(14, "Carregando o motor de separação…")
             WorkerExitDiagnostics.markPhase(context, "demucs:model-load")
 
             val blasThreads = DemucsThreadPolicy.resolve()
@@ -100,7 +100,7 @@ internal object DemucsSeparator {
             WorkerExitDiagnostics.markPhase(context, "demucs:model-loaded")
             peakPssKb = maxOf(peakPssKb, Debug.getPss())
             val runtimeIdentity = DemucsNative.identity()
-            report(15, "Modelo carregado. Iniciando separação em seis stems • BLAS $blasThreads threads…")
+            report(15, "Iniciando a separação em seis faixas…")
 
             val plans = DemucsChunking.plan(inputInfo.frames)
             val stemFiles = DemucsModelContract.stemNames.associateWith { stem -> File(outputDir, "$stem.wav") }

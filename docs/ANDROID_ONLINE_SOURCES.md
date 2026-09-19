@@ -1,31 +1,26 @@
 # GBW Android — Pesquisa e Aquisição Online de Fontes
 
 ## Arquitetura
-Pesquisa/ranking e aquisição/preparação são responsabilidades separadas. O ranking permanece independente de provider; a aquisição só é oferecida quando o candidato declara suporte automático.
+Pesquisa/ranking e aquisição/preparação são responsabilidades separadas. A lista principal mostra somente fontes que o GBW consegue preparar automaticamente.
 
-## Ranking
-SourceSearchRules porta o contrato Linux 5.23: normalização, gate de título, confirmação de artista, penalidades para cover/karaoke/reaction/tutorial/slowed/sped/nightcore/8D/live/remix, preview/truncamento, consenso de duração, deduplicação e ranking determinístico.
+## Providers ativos
+A pesquisa automática usa Bandcamp, SoundCloud e YouTube. Apple Music/iTunes foi removido do fluxo porque fornece metadados/catálogo, mas não uma fonte que o GBW possa adquirir e preparar.
 
-Providers de catálogo/discovery incluem Bandcamp e Apple Music/iTunes; Apple Music permanece catálogo e não é tratado como fonte baixável.
+## Resiliência da pesquisa
+Resultados individuais podem desaparecer, ficar privados, sofrer bloqueio regional ou deixar de estar disponíveis entre a pesquisa e a inspeção. Essas falhas são tratadas por candidato: um vídeo indisponível é descartado e os demais resultados continuam sendo avaliados. A pesquisa só falha como um todo quando nenhum provider consegue executar.
 
 ## Aquisição
-YouTube/SoundCloud e URL manual compatível usam yt-dlp Android. A mídia é re-inspecionada no momento da aquisição; o formatId obtido durante ranking é apenas advisory e não é confiado cegamente depois.
+YouTube/SoundCloud e URL manual compatível usam yt-dlp Android. A mídia é re-inspecionada no momento da aquisição; o formato observado durante ranking é apenas uma pista e não é confiado cegamente depois.
 
-## Homologação 2026-09-18 — defeito 403
-O vídeo físico confirmou que pesquisa e ranking funcionaram, mas o candidato YouTube falhou na preparação com:
-ERROR: unable to download video data: HTTP Error 403: Forbidden
+A preparação online é persistida pelo WorkManager e não usa um foreground service `dataSync`. Isso evita que a ação do usuário seja recusada por quota acumulada de foreground services em Android recente. Mudança de tela não cancela a pesquisa nem a preparação.
 
-O alpha11 corrige o caminho de aquisição:
-- tenta atualizar o yt-dlp pelo UpdateChannel.NIGHTLY suportado pela biblioteca Android;
-- limpa o diretório de tentativa antes de retry;
-- usa retries e fragment-retries limitados, sem loop infinito;
-- não reutiliza uma URL de mídia expirada como prova de formato válido;
-- para YouTube usa tentativas isoladas, não uma cadeia multi-client: formato fresco/default; android_vr após atualização; web_embedded isolado;
-- só erros classificados como transitórios/403/PO-token/SABR/signature/formato indisponível acionam fallback;
-- cancelamento encerra todos os processIds das tentativas.
+## Falhas transitórias
+O caminho de aquisição mantém retries limitados e fallbacks isolados para problemas como HTTP 403, formato expirado, assinatura/PO-token e rotas de cliente incompatíveis. Não há loop infinito.
 
 ## Estado de UI
-Artista, música, profundidade, URL manual e resultados permanecem no ViewModel/SavedStateHandle durante mudança de configuração.
+Artista, música, profundidade, URL manual, resultados e seleção pertencem ao ViewModel e permanecem vivos ao navegar entre telas. Ao trocar de projeto, o estado de resultados é invalidado para impedir vazamento entre projetos.
+
+Erros e alertas são apresentados junto à ação relacionada e também por mensagem temporária para facilitar a percepção.
 
 ## Testes
-Cobertura inclui regras/ranking, parsers, fallback de providers, estado, links, isolamento de falhas e a nova matriz de download: formato fresco, fallbacks isolados, classificação de HTTP 403 e caminho não-YouTube de tentativa única.
+A cobertura inclui ranking, isolamento de providers, descarte de candidato indisponível sem abortar a busca, filtro de fontes não baixáveis, persistência de estado, scoping por projeto, fallback de download e contrato WorkManager sem foreground `dataSync`.

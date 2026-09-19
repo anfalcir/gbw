@@ -6,14 +6,18 @@ import android.content.pm.ServiceInfo
 internal object ForegroundServiceTypePolicy {
     @SuppressLint("InlinedApi")
     fun typeForSdk(sdkInt: Int): Int =
-        if (sdkInt >= 29) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-        } else {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE
+        when {
+            sdkInt >= 35 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+            sdkInt >= 29 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            else -> ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE
         }
 
     fun labelForSdk(sdkInt: Int): String =
-        if (sdkInt >= 29) "dataSync" else "legacy"
+        when {
+            sdkInt >= 35 -> "mediaProcessing"
+            sdkInt >= 29 -> "dataSync"
+            else -> "legacy"
+        }
 
     fun userFacingFailure(error: Exception): String =
         when (error::class.java.simpleName) {

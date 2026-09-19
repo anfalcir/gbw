@@ -53,4 +53,26 @@ class SourceSearchCoordinatorTest {
         assertTrue(result.candidates.isEmpty())
         assertEquals(listOf("offline"), result.warnings)
     }
+
+    @Test
+    fun `non-downloadable candidates are filtered before ranking`() = runBlocking {
+        val catalog = object : SourceSearchProviderClient {
+            override suspend fun search(request: SourceSearchRequest): List<SourceCandidateDraft> =
+                listOf(
+                    SourceCandidateDraft(
+                        provider = SourceProvider.OTHER,
+                        title = "Enemy",
+                        uploader = "Wolves At The Gate",
+                        url = "https://music.apple.com/test",
+                        durationSeconds = 197.0,
+                        automaticDownloadSupported = false,
+                    )
+                )
+        }
+
+        val result = SourceSearchCoordinator(listOf(catalog))
+            .search(SourceSearchRequest("Wolves At The Gate", "Enemy"))
+
+        assertTrue(result.candidates.isEmpty())
+    }
 }

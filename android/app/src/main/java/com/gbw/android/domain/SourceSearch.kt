@@ -9,7 +9,6 @@ enum class SourceProvider(val publicLabel: String) {
     BANDCAMP("Bandcamp"),
     SOUNDCLOUD("SoundCloud"),
     YOUTUBE("YouTube"),
-    APPLE_MUSIC("Apple Music"),
     OTHER("Outra"),
 }
 
@@ -201,7 +200,6 @@ object SourceSearchRules {
             SourceProvider.BANDCAMP -> 45
             SourceProvider.SOUNDCLOUD -> 48
             SourceProvider.YOUTUBE -> 50
-            SourceProvider.APPLE_MUSIC -> 48
             SourceProvider.OTHER -> 45
         }
         score += draft.qualityBonus
@@ -241,13 +239,6 @@ object SourceSearchRules {
                 } else if (artistSimilarity >= 0.82) {
                     score += 6
                     reasons += "canal compatível"
-                }
-            }
-            SourceProvider.APPLE_MUSIC -> {
-                if (draft.officialSignal || artistSimilarity >= 0.80) {
-                    score += 8
-                    official = true
-                    reasons += "catálogo oficial"
                 }
             }
             SourceProvider.BANDCAMP, SourceProvider.SOUNDCLOUD, SourceProvider.OTHER -> {

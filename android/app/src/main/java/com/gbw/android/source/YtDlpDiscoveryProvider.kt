@@ -23,6 +23,8 @@ class YtDlpDiscoveryProvider(
         val maxInspect = if (request.depth == SourceSearchDepth.MAXIMUM) 8 else 5
         val out = mutableListOf<SourceCandidateDraft>()
         val seen = mutableSetOf<String>()
+        var successfulSearches = 0
+        var lastSearchFailure: Exception? = null
 
         val searches = listOf(
             Pair(SourceProvider.SOUNDCLOUD, "scsearch$maxSearch:$query"),
@@ -32,16 +34,24 @@ class YtDlpDiscoveryProvider(
 
         for ((provider, target) in searches) {
             currentCoroutineContext().ensureActive()
-            val json = YtDlpRuntime.executeJson(
-                context = context,
-                target = target,
-                options = listOf(
-                    "--skip-download" to null,
-                    "--flat-playlist" to null,
-                    "--dump-single-json" to null,
-                ),
-                processId = "search-" + UUID.randomUUID(),
-            )
+            val json = try {
+                YtDlpRuntime.executeJson(
+                    context = context,
+                    target = target,
+                    options = listOf(
+                        "--skip-download" to null,
+                        "--flat-playlist" to null,
+                        "--dump-single-json" to null,
+                    ),
+                    processId = "search-" + UUID.randomUUID(),
+                ).also { successfulSearches += 1 }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                lastSearchFailure = error
+                continue
+            }
+
             val root = JSONObject(json)
             val entries = root.optJSONArray("entries") ?: continue
             var inspected = 0
@@ -54,7 +64,13 @@ class YtDlpDiscoveryProvider(
                 val url = entryUrl(entry, provider)
                 if (url.isBlank() || !seen.add(url)) continue
 
-                val candidate = inspectUrl(url, provider)
+                // Search indexes routinely contain deleted, geo-blocked, private
+                // or otherwise unavailable entries. A single stale video must
+                // never abort the provider search or discard healthy candidates.
+                val candidate = YtDlpDiscoveryResilience.availableOrNull {
+                    inspectUrl(url, provider)
+                } ?: continue
+                if (!candidate.automaticDownloadSupported || candidate.previewOnly) continue
                 if (!SourceSearchRules.titleMatchesSong(request.song, candidate.title)) continue
                 if (
                     request.artist.isNotBlank() &&
@@ -63,6 +79,10 @@ class YtDlpDiscoveryProvider(
                 out += candidate
                 inspected += 1
             }
+        }
+
+        if (out.isEmpty() && successfulSearches == 0 && lastSearchFailure != null) {
+            throw lastSearchFailure
         }
         return out
     }
@@ -94,6 +114,17 @@ class YtDlpDiscoveryProvider(
         }
         return ""
     }
+}
+
+internal object YtDlpDiscoveryResilience {
+    suspend fun <T> availableOrNull(block: suspend () -> T): T? =
+        try {
+            block()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
 }
 
 internal object YtDlpInfoParser {

@@ -72,6 +72,10 @@ jobs:
         working-directory: android
         run: python3 scripts/verify_project_scoped_workflow.py
 
+      - name: Online source resilience gate
+        working-directory: android
+        run: python3 scripts/verify_online_source_resilience.py
+
       - name: Original-only architecture gate
         working-directory: android
         run: python3 scripts/verify_original_only.py
@@ -175,7 +179,7 @@ jobs:
           test -n "$MANIFEST"
           grep -Fq 'android:name="com.gbw.android.background.MediaProcessingService"' "$MANIFEST"
           grep -Fq 'android:process=":media"' "$MANIFEST"
-          grep -Fq 'android:foregroundServiceType="dataSync"' "$MANIFEST"
+          grep -Fq 'android:foregroundServiceType="dataSync|mediaProcessing"' "$MANIFEST"
           echo "APK_WORKER_PROCESS_CONTRACT_OK"
 
       - name: Generate build metadata

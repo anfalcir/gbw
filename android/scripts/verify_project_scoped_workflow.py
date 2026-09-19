@@ -18,6 +18,7 @@ repo = read("app/src/main/java/com/gbw/android/project/ProjectRepository.kt")
 ui = read("app/src/main/java/com/gbw/android/ui/GbwApp.kt")
 screens = read("app/src/main/java/com/gbw/android/ui/ProjectScreens.kt")
 service = read("app/src/main/java/com/gbw/android/background/MediaProcessingService.kt")
+source_worker = read("app/src/main/java/com/gbw/android/background/SourcePreparationWorker.kt")
 
 publish_sep = section(repo, "fun publishSeparation(", "fun publishExport(")
 publish_export = section(repo, "fun publishExport(", "fun setLastSynced(")
@@ -42,6 +43,6 @@ assert 'Text(if (isActive) "Continuar" else "Abrir")' in screens
 assert "jobProjectId == p.projectId" in screens
 
 assert "projects.publishSeparation(projectId, validated)" in service
-assert "projects.adoptPreparedSource(" in service
+assert "projects.adoptPreparedSource(" in source_worker
 
 print("PROJECT_SCOPED_WORKFLOW_OK")

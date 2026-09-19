@@ -81,6 +81,7 @@ internal fun ProjectsScreen(
     var renameText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<ProjectManifest?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    ToastMessage(message, long = true)
 
     fun refresh() {
         projects = repo.list()
@@ -115,7 +116,7 @@ internal fun ProjectsScreen(
     ) {
         Text("Projetos", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Cada projeto possui identidade interna própria. Duplicar cria uma nova cópia independente.",
+            "Organize suas músicas e retome cada projeto de onde parou.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -310,6 +311,7 @@ internal fun ProjectExportScreen(
     var copyBusy by remember { mutableStateOf(false) }
     var startingExport by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    ToastMessage(message, long = true)
     var handledTerminalJobId by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
@@ -390,7 +392,7 @@ internal fun ProjectExportScreen(
         if (p.separation == null) {
             WorkflowEmptyState(
                 title = "Separação necessária",
-                message = "Este projeto ainda não possui os seis stems do Demucs.",
+                message = "Este projeto ainda não possui a separação em seis faixas.",
                 actionLabel = if (p.source == null) "Ir para Fonte" else "Ir para Separação",
                 onAction = if (p.source == null) onGoToSource else onGoToSeparation,
             )
@@ -398,8 +400,7 @@ internal fun ProjectExportScreen(
         }
 
         Text(
-            "Backing + guitar no tom original. O pico é avaliado em conjunto e, quando necessário, " +
-                "um único ganho compartilhado preserva a relação entre os dois arquivos.",
+            "Exporte a backing track e a guitarra separadamente, mantendo a música no tom original e os níveis coerentes entre os arquivos.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -435,7 +436,7 @@ internal fun ProjectExportScreen(
                                 jobId,
                             ),
                         )
-                        message = "Exportação iniciada em segundo plano."
+                        message = "Exportação iniciada. Você pode continuar usando o aplicativo."
                     } catch (error: Exception) {
                         withContext(Dispatchers.IO) { projectLinks.remove(jobId) }
                         message = error.message ?: "Falha ao iniciar a exportação."
@@ -506,6 +507,7 @@ internal fun BackupSettingsScreen() {
     var settings by remember { mutableStateOf(store.load()) }
     var working by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    ToastMessage(message, long = true)
     var conflicts by remember { mutableStateOf(conflictStore.load()) }
     var dirtyCount by remember { mutableStateOf(0) }
     var requestedSyncAt by rememberSaveable { mutableStateOf(0L) }
@@ -574,7 +576,7 @@ internal fun BackupSettingsScreen() {
                     BackupScheduler.enqueueInitialSync(context)
                     message =
                         "Destino conectado: ${descriptor.label}. " +
-                        "A sincronização inicial continuará em segundo plano."
+                        "A sincronização inicial continuará automaticamente."
                 } catch (e: Exception) {
                     message = e.message ?: "A pasta não pôde ser validada."
                 } finally {
@@ -594,8 +596,7 @@ internal fun BackupSettingsScreen() {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Backup", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "O backup usa a pasta escolhida pelo Android/Google Drive, mas todas as leituras, " +
-                        "gravações e reconciliações pesadas acontecem fora da interface.",
+                    "Escolha uma pasta no dispositivo ou no Google Drive. O GBW organiza e mantém seus projetos atualizados automaticamente.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -678,7 +679,7 @@ internal fun BackupSettingsScreen() {
                         runCatching {
                             requestedSyncAt = System.currentTimeMillis()
                             BackupScheduler.enqueueManual(context)
-                        }.onSuccess { message = "Sincronização/backup solicitado em segundo plano." }
+                        }.onSuccess { message = "Backup solicitado. O GBW continuará automaticamente." }
                             .onFailure { message = it.message }
                     },
                     enabled = settings.treeUri != null && !working,
@@ -696,7 +697,7 @@ internal fun BackupSettingsScreen() {
                 }
 
                 Text(
-                    "No Drive: Projetos → Banda - Música → Fonte / Separacao - Stems / Exports / Projeto.",
+                    "Os arquivos são organizados automaticamente por artista e música no destino escolhido.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -5,9 +5,30 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.gbw.android.domain.RankedSourceCandidate
 import com.gbw.android.domain.SourceSearchDepth
 import com.gbw.android.source.SourceDiscoveryResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+
+internal enum class SourceNoticePlacement {
+    LOCAL,
+    SEARCH,
+    PREPARATION,
+    MANUAL_URL,
+}
+
+internal data class SourceUiNotice(
+    val placement: SourceNoticePlacement,
+    val message: String,
+    val isError: Boolean,
+)
+
+internal data class SourceToastEvent(
+    val id: Long,
+    val message: String,
+)
 
 internal class SourceSearchViewModel(
     private val savedStateHandle: SavedStateHandle,
@@ -18,6 +39,7 @@ internal class SourceSearchViewModel(
         private const val KEY_DEPTH = "source.search.depth"
         private const val KEY_MANUAL_URL = "source.search.manualUrl"
         private const val KEY_SELECTED_URL = "source.search.selectedUrl"
+        private const val KEY_PROJECT_ID = "source.search.projectId"
     }
 
     var artist by mutableStateOf(savedStateHandle[KEY_ARTIST] ?: "")
@@ -32,13 +54,30 @@ internal class SourceSearchViewModel(
         private set
     var selectedUrl by mutableStateOf(savedStateHandle[KEY_SELECTED_URL] ?: "")
         private set
-
     var searching by mutableStateOf(false)
         private set
     var results by mutableStateOf<List<RankedSourceCandidate>>(emptyList())
         private set
-    var message by mutableStateOf<String?>(null)
+    var notices by mutableStateOf<Map<SourceNoticePlacement, SourceUiNotice>>(emptyMap())
         private set
+    var toastEvent by mutableStateOf<SourceToastEvent?>(null)
+        private set
+
+    private var projectId: String? = savedStateHandle[KEY_PROJECT_ID]
+    private var searchGeneration = 0L
+    private var nextToastId = 0L
+
+    fun bindProject(value: String?) {
+        if (projectId == value) return
+        projectId = value
+        savedStateHandle[KEY_PROJECT_ID] = value
+        searchGeneration += 1
+        searching = false
+        results = emptyList()
+        selectedUrl = ""
+        notices = emptyMap()
+        savedStateHandle[KEY_SELECTED_URL] = ""
+    }
 
     fun syncIdentity(artistValue: String, songValue: String) {
         updateArtist(artistValue)
@@ -46,13 +85,15 @@ internal class SourceSearchViewModel(
     }
 
     fun resetSession() {
+        bindProject(null)
         artist = ""
         song = ""
         manualUrl = ""
         selectedUrl = ""
         searching = false
         results = emptyList()
-        message = null
+        notices = emptyMap()
+        toastEvent = null
         savedStateHandle[KEY_ARTIST] = ""
         savedStateHandle[KEY_SONG] = ""
         savedStateHandle[KEY_MANUAL_URL] = ""
@@ -79,56 +120,106 @@ internal class SourceSearchViewModel(
         savedStateHandle[KEY_MANUAL_URL] = value
     }
 
-    fun updateMessage(value: String?) {
-        message = value
+    fun postNotice(
+        placement: SourceNoticePlacement,
+        message: String,
+        isError: Boolean = false,
+        toast: Boolean = isError,
+    ) {
+        notices = notices + (placement to SourceUiNotice(placement, message, isError))
+        if (toast) {
+            nextToastId += 1
+            toastEvent = SourceToastEvent(nextToastId, message)
+        }
+    }
+
+    fun noticeFor(placement: SourceNoticePlacement): SourceUiNotice? = notices[placement]
+
+    fun consumeToast(id: Long) {
+        if (toastEvent?.id == id) toastEvent = null
     }
 
     fun selectCandidate(candidate: RankedSourceCandidate) {
-        if (candidate.previewOnly) {
-            message = "Esse resultado é apenas um trecho curto e não pode ser usado."
+        if (candidate.previewOnly || !candidate.automaticDownloadSupported) {
+            postNotice(
+                SourceNoticePlacement.PREPARATION,
+                "Esse resultado não pode ser preparado automaticamente. Escolha outra fonte.",
+                isError = true,
+            )
             return
         }
         selectedUrl = candidate.url
         savedStateHandle[KEY_SELECTED_URL] = candidate.url
-        message = if (candidate.automaticDownloadSupported) {
-            "Fonte selecionada: ${candidate.provider.publicLabel}. Pronta para preparação automática."
-        } else {
-            "Fonte de catálogo selecionada. Escolha um resultado com download automático ou use URL manual."
-        }
+        postNotice(
+            SourceNoticePlacement.PREPARATION,
+            "Fonte selecionada: ${candidate.provider.publicLabel}. Pronta para preparação automática.",
+        )
     }
 
     fun selectedCandidate(): RankedSourceCandidate? =
         results.firstOrNull { it.url == selectedUrl }
 
-    fun beginSearch() {
+    internal fun beginSearch() {
+        if (searching) return
+        searchGeneration += 1
         searching = true
         results = emptyList()
-        message = "Pesquisando fontes…"
+        postNotice(SourceNoticePlacement.SEARCH, "Pesquisando fontes…")
     }
 
-    fun completeSearch(result: SourceDiscoveryResult) {
-        results = result.candidates
-        val safe = result.candidates.firstOrNull { !it.previewOnly && it.automaticDownloadSupported }
-        if (safe != null && results.none { it.url == selectedUrl && !it.previewOnly }) {
+    fun search(block: suspend () -> SourceDiscoveryResult) {
+        if (searching) return
+        val generation = ++searchGeneration
+        searching = true
+        results = emptyList()
+        postNotice(SourceNoticePlacement.SEARCH, "Pesquisando fontes…")
+        viewModelScope.launch {
+            try {
+                val result = block()
+                if (generation == searchGeneration) completeSearch(result)
+            } catch (cancelled: CancellationException) {
+                if (generation == searchGeneration) searching = false
+                throw cancelled
+            } catch (error: Exception) {
+                if (generation == searchGeneration) failSearch(error)
+            }
+        }
+    }
+
+    internal fun completeSearch(result: SourceDiscoveryResult) {
+        // Only automatically usable sources belong in the primary result list.
+        results = result.candidates.filter { it.automaticDownloadSupported && !it.previewOnly }
+        val safe = results.firstOrNull()
+        if (safe != null && results.none { it.url == selectedUrl }) {
             selectedUrl = safe.url
             savedStateHandle[KEY_SELECTED_URL] = safe.url
         }
-        message = when {
-            result.candidates.isEmpty() && result.warnings.isNotEmpty() ->
-                "Nenhuma fonte direta encontrada. " + result.warnings.joinToString(" ")
-            result.candidates.isEmpty() ->
-                "Nenhuma fonte direta encontrada. Use a busca ampla abaixo."
+        val message = when {
+            results.isEmpty() && result.warnings.isNotEmpty() ->
+                "Nenhuma fonte utilizável encontrada. " + result.warnings.joinToString(" ")
+            results.isEmpty() ->
+                "Nenhuma fonte utilizável encontrada. Use a busca ampla abaixo."
             result.warnings.isNotEmpty() ->
-                "${result.candidates.size} resultado(s). " + result.warnings.joinToString(" ")
+                "${results.size} resultado(s) utilizável(is). Algumas fontes indisponíveis foram ignoradas."
             else ->
-                "${result.candidates.size} resultado(s) encontrado(s)."
+                "${results.size} resultado(s) utilizável(is) encontrado(s)."
         }
+        postNotice(
+            SourceNoticePlacement.SEARCH,
+            message,
+            isError = results.isEmpty(),
+            toast = results.isEmpty(),
+        )
         searching = false
     }
 
-    fun failSearch(error: Throwable) {
+    internal fun failSearch(error: Throwable) {
         results = emptyList()
-        message = error.message ?: "Falha na pesquisa online."
+        postNotice(
+            SourceNoticePlacement.SEARCH,
+            error.message ?: "Falha na pesquisa online.",
+            isError = true,
+        )
         searching = false
     }
 }

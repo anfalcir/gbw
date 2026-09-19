@@ -7,10 +7,12 @@ logs = (ROOT / "app/src/main/java/com/gbw/android/ui/LogsScreen.kt").read_text(e
 store = (ROOT / "app/src/main/java/com/gbw/android/background/JobStore.kt").read_text(encoding="utf-8")
 history = (ROOT / "app/src/main/java/com/gbw/android/background/JobHistoryStore.kt").read_text(encoding="utf-8")
 
-assert "AppPage.LOGS -> LogsScreen()" in ui
+assert "LOGS(" not in ui
+assert "LogsScreen(embedded = true)" in ui
 assert "PlaceholderScreen" not in ui
 assert "Diagnóstico avançado" in ui
-assert ui.count("Detalhes técnicos") >= 2
+assert ui.count("Detalhes técnicos") >= 1
+assert "Linux v5.23" not in ui
 assert "Copiar tudo" in logs
 assert "Limpar histórico" in logs
 assert "Job:" in logs

@@ -3,6 +3,7 @@ package com.gbw.android.ui
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -65,6 +66,7 @@ import com.gbw.android.BuildConfig
 import com.gbw.android.audio.AudioInspectionDispatcher
 import com.gbw.android.background.JobStore
 import com.gbw.android.background.MediaProcessingService
+import com.gbw.android.background.SourcePreparationWorker
 import com.gbw.android.background.WorkerExitDiagnostics
 import com.gbw.android.backup.BackupScheduler
 import com.gbw.android.backup.BackupSettingsStore
@@ -74,13 +76,13 @@ import com.gbw.android.domain.RankedSourceCandidate
 import com.gbw.android.domain.SourceSearchDepth
 import com.gbw.android.domain.SourceSearchRequest
 import com.gbw.android.domain.SourceSearchLinks
-import com.gbw.android.separation.DemucsRuntimeMonitor
 import com.gbw.android.separation.DemucsThreadPolicy
 import com.gbw.android.separation.SeparationResultFiles
 import com.gbw.android.separation.SeparationResultStore
 import com.gbw.android.separation.SeparationStemExporter
 import com.gbw.android.separation.StemPreviewPlayer
 import com.gbw.android.separation.ValidatedSeparationResult
+import com.gbw.android.source.OnlineSourcePrepareRequest
 import com.gbw.android.source.SourceSearchCoordinator
 import com.gbw.android.source.PreparedSourceStore
 import com.gbw.android.project.LegacyProjectMigrator
@@ -96,14 +98,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
-private const val SEPARATION_STARTED_MESSAGE = "Separação iniciada em segundo plano."
+private const val SEPARATION_STARTED_MESSAGE = "Separação iniciada. Você pode continuar usando o aplicativo."
 
 private enum class AppPage(val title: String, val group: String) {
-    SOURCE("1. Fonte", "PROCESSO"),
-    SEPARATION("2. Separação", "PROCESSO"),
-    EXPORT("3. Exportação", "PROCESSO"),
-    PROJECTS("Projetos", "GERENCIAMENTO"),
-    LOGS("Logs", "GERENCIAMENTO"),
+    SOURCE("1. Fonte", "FLUXO"),
+    SEPARATION("2. Separação", "FLUXO"),
+    EXPORT("3. Exportação", "FLUXO"),
+    PROJECTS("Projetos", "BIBLIOTECA"),
     SETTINGS("Configurações", "APLICATIVO"),
     SYSTEM("Sistema", "APLICATIVO"),
 }
@@ -258,8 +259,8 @@ private fun SideBar(
 ) {
     val scroll = rememberScrollState()
     Column(modifier.padding(16.dp).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("GBW", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Android ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
+        Text("Guitar Backing Wizard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Versão ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(10.dp))
         if (activeProject == null) {
             Text(
@@ -306,7 +307,6 @@ private fun SideBar(
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text("Baseline: Linux v5.23", style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -349,7 +349,6 @@ private fun PageContent(
                     },
                     onCreate = { onNavigate(AppPage.SOURCE) },
                 )
-                AppPage.LOGS -> LogsScreen()
                 AppPage.SETTINGS -> BackupSettingsScreen()
                 AppPage.SYSTEM -> SystemScreen()
             }
@@ -387,12 +386,19 @@ private fun SourceScreen(
         selectedUriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
     }
 
+    LaunchedEffect(searchState.toastEvent?.id) {
+        val event = searchState.toastEvent ?: return@LaunchedEffect
+        Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
+        searchState.consumeToast(event.id)
+    }
+
     LaunchedEffect(projectSession) {
         val active = withContext(Dispatchers.IO) { projectRepository.active() }
         activeProjectId = active?.projectId
         if (active == null) {
             searchState.resetSession()
         } else {
+            searchState.bindProject(active.projectId)
             searchState.syncIdentity(active.artist, active.song)
         }
     }
@@ -423,11 +429,16 @@ private fun SourceScreen(
                         requireNotNull(projectRepository.projectSourceUri(project.projectId)).toString()
                     }
                     activeProjectId = project.projectId
+                    searchState.bindProject(project.projectId)
                     onSelectedUri(managed)
                     onProjectContextChanged()
-                    searchState.updateMessage("Fonte local incorporada ao projeto.")
+                    searchState.postNotice(SourceNoticePlacement.LOCAL, "Fonte local incorporada ao projeto.")
                 } catch (error: Exception) {
-                    searchState.updateMessage(error.message ?: "Falha ao incorporar a fonte local.")
+                    searchState.postNotice(
+                        SourceNoticePlacement.LOCAL,
+                        error.message ?: "Falha ao incorporar a fonte local.",
+                        isError = true,
+                    )
                 } finally {
                     incorporatingLocal = false
                 }
@@ -489,11 +500,19 @@ private fun SourceScreen(
                             onSelectedUri(managedUri)
                             onProjectContextChanged()
                             searchState.syncIdentity(project.artist, project.song)
-                            searchState.updateMessage("Fonte online incorporada ao projeto e preparada com sucesso.")
+                            searchState.postNotice(
+                                SourceNoticePlacement.PREPARATION,
+                                "Fonte online incorporada ao projeto e preparada com sucesso.",
+                                toast = true,
+                            )
                         }
                     } catch (error: Exception) {
                         handledSourceTerminalJobId = job.id
-                        searchState.updateMessage(error.message ?: "Falha ao incorporar a fonte ao projeto.")
+                        searchState.postNotice(
+                            SourceNoticePlacement.PREPARATION,
+                            error.message ?: "Falha ao incorporar a fonte ao projeto.",
+                            isError = true,
+                        )
                     }
                 } else {
                     consumedPreparedJobId = job.id
@@ -502,8 +521,10 @@ private fun SourceScreen(
                         withContext(Dispatchers.IO) { projectLinks.remove(job.id) }
                     }
                     if (linkedProjectId == activeProjectId || linkedProjectId == null) {
-                        searchState.updateMessage(
-                            "A preparação terminou, mas o resultado não possui vínculo íntegro com o projeto. Tente novamente."
+                        searchState.postNotice(
+                            SourceNoticePlacement.PREPARATION,
+                            "A preparação terminou, mas o resultado não possui vínculo íntegro com o projeto. Tente novamente.",
+                            isError = true,
                         )
                     }
                 }
@@ -514,7 +535,12 @@ private fun SourceScreen(
             ) {
                 handledSourceTerminalJobId = job.id
                 if (linkedProjectId == activeProjectId || linkedProjectId == null) {
-                    searchState.updateMessage(job.message)
+                    searchState.postNotice(
+                        SourceNoticePlacement.PREPARATION,
+                        job.message,
+                        isError = job.state == "ERROR" || job.state == "INTERRUPTED",
+                        toast = true,
+                    )
                 }
                 linkedProjectId?.let {
                     withContext(Dispatchers.IO) { projectLinks.remove(job.id) }
@@ -535,6 +561,12 @@ private fun SourceScreen(
             inspectionError = error.message ?: "Falha ao analisar o arquivo selecionado."
         } finally {
             inspecting = false
+        }
+    }
+
+    LaunchedEffect(inspectionError) {
+        inspectionError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -576,6 +608,7 @@ private fun SourceScreen(
                 inspectionError?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)
                 }
+                SourceNoticeText(searchState.noticeFor(SourceNoticePlacement.LOCAL))
                 inspection?.let { QualityCard(it) }
             }
         }
@@ -588,8 +621,7 @@ private fun SourceScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "O GBW usa o mesmo contrato do Linux 5.23: pesquisa, inspeciona e ranqueia fontes; " +
-                        "depois baixa automaticamente o candidato selecionado e prepara o áudio para Separação.",
+                    "Pesquise por artista e música. O GBW compara fontes disponíveis e destaca as opções que podem ser preparadas automaticamente.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -629,34 +661,33 @@ private fun SourceScreen(
                         val artist = normalizeProjectText(searchState.artist)
                         val song = normalizeProjectText(searchState.song)
                         if (song.isBlank()) {
-                            searchState.updateMessage("Informe o nome da música.")
+                            searchState.postNotice(
+                                SourceNoticePlacement.SEARCH,
+                                "Informe o nome da música.",
+                                isError = true,
+                            )
                         } else {
+                            val currentProject = projectRepository.active()
+                                ?: projectRepository.create(
+                                    name = automaticProjectName(artist, song),
+                                    artist = artist,
+                                    song = song,
+                                )
+                            projectRepository.updateMetadata(
+                                currentProject.projectId,
+                                artist,
+                                song,
+                            )
+                            activeProjectId = currentProject.projectId
+                            searchState.bindProject(currentProject.projectId)
                             searchState.syncIdentity(artist, song)
-                            searchState.beginSearch()
                             val request = SourceSearchRequest(
                                 artist = artist,
                                 song = song,
                                 depth = SourceSearchDepth.valueOf(searchState.depthName),
                             )
-                            onlineScope.launch {
-                                try {
-                                    withContext(Dispatchers.IO) {
-                                        val currentProject = projectRepository.active()
-                                            ?: projectRepository.create(
-                                                name = automaticProjectName(artist, song),
-                                                artist = artist,
-                                                song = song,
-                                            )
-                                        projectRepository.updateMetadata(
-                                            currentProject.projectId,
-                                            artist,
-                                            song,
-                                        )
-                                    }
-                                    searchState.completeSearch(onlineCoordinator.search(request))
-                                } catch (error: Exception) {
-                                    searchState.failSearch(error)
-                                }
+                            searchState.search {
+                                onlineCoordinator.search(request)
                             }
                         }
                     },
@@ -665,17 +696,7 @@ private fun SourceScreen(
                     Text(if (searchState.searching) "Pesquisando…" else "Encontrar fontes")
                 }
 
-                searchState.message?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (searchState.results.isEmpty() && !searchState.searching) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
-                    )
-                }
+                SourceNoticeText(searchState.noticeFor(SourceNoticePlacement.SEARCH))
 
                 searchState.results.forEachIndexed { index, candidate ->
                     OnlineSourceCandidateCard(
@@ -689,9 +710,11 @@ private fun SourceScreen(
                                     Intent(Intent.ACTION_VIEW, Uri.parse(candidate.url)),
                                 )
                             }.onFailure { error ->
-                                searchState.updateMessage(
+                                searchState.postNotice(
+                                    SourceNoticePlacement.SEARCH,
                                     "Não foi possível abrir a fonte: " +
                                         (error.message ?: "nenhum aplicativo compatível."),
+                                    isError = true,
                                 )
                             }
                         },
@@ -732,18 +755,32 @@ private fun SourceScreen(
                             }
                             val jobId = UUID.randomUUID().toString()
                             projectLinks.link(jobId, project.projectId)
-                            val intent = MediaProcessingService.sourcePrepareIntent(
-                                context = context,
-                                url = candidate.url,
-                                provider = candidate.provider,
-                                formatId = candidate.formatId,
-                                expectedDurationSeconds = candidate.durationSeconds,
-                                title = candidate.title,
-                                jobId = jobId,
-                            )
-                            ContextCompat.startForegroundService(context, intent)
-                            sourceJobState = sourceJobStore.loadReconciled()
-                            searchState.updateMessage("Preparando fonte selecionada em segundo plano…")
+                            runCatching {
+                                SourcePreparationWorker.enqueue(
+                                    context = context,
+                                    jobId = jobId,
+                                    request = OnlineSourcePrepareRequest(
+                                        url = candidate.url,
+                                        provider = candidate.provider,
+                                        formatId = candidate.formatId,
+                                        expectedDurationSeconds = candidate.durationSeconds,
+                                        title = candidate.title,
+                                    ),
+                                )
+                            }.onSuccess {
+                                sourceJobState = sourceJobStore.loadReconciled()
+                                searchState.postNotice(
+                                    SourceNoticePlacement.PREPARATION,
+                                    "Preparação iniciada. Você pode trocar de tela; a tarefa continuará.",
+                                )
+                            }.onFailure { error ->
+                                projectLinks.remove(jobId)
+                                searchState.postNotice(
+                                    SourceNoticePlacement.PREPARATION,
+                                    error.message ?: "Falha ao agendar a preparação da fonte.",
+                                    isError = true,
+                                )
+                            }
                         },
                         enabled = selectedCandidate.automaticDownloadSupported &&
                             !selectedCandidate.previewOnly &&
@@ -752,6 +789,8 @@ private fun SourceScreen(
                         Text(if (sourceJobRunning) "Preparando…" else "Preparar fonte selecionada")
                     }
                 }
+
+                SourceNoticeText(searchState.noticeFor(SourceNoticePlacement.PREPARATION))
 
                 sourceJobState?.takeIf {
                     it.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
@@ -769,11 +808,8 @@ private fun SourceScreen(
                             if (job.state == "RUNNING") {
                                 OutlinedButton(
                                     onClick = {
-                                        ContextCompat.startForegroundService(
-                                            context,
-                                            Intent(context, MediaProcessingService::class.java)
-                                                .setAction(MediaProcessingService.ACTION_CANCEL),
-                                        )
+                                        SourcePreparationWorker.cancel(context, job.id)
+                                        sourceJobState = sourceJobStore.loadReconciled()
                                     },
                                 ) {
                                     Text("Cancelar preparação")
@@ -809,9 +845,11 @@ private fun SourceScreen(
                                             Intent(Intent.ACTION_VIEW, Uri.parse(link.url)),
                                         )
                                     }.onFailure { error ->
-                                        searchState.updateMessage(
+                                        searchState.postNotice(
+                                            SourceNoticePlacement.SEARCH,
                                             "Não foi possível abrir ${link.label}: " +
                                                 (error.message ?: "nenhum aplicativo compatível."),
+                                            isError = true,
                                         )
                                     }
                                 },
@@ -841,7 +879,11 @@ private fun SourceScreen(
                     onClick = {
                         val uri = manualUri
                         if (uri == null) {
-                            searchState.updateMessage("Informe uma URL válida iniciando com http:// ou https://.")
+                            searchState.postNotice(
+                                SourceNoticePlacement.MANUAL_URL,
+                                "Informe uma URL válida iniciando com http:// ou https://.",
+                                isError = true,
+                            )
                         } else {
                             val project = projectRepository.active()
                                 ?: projectRepository.create(
@@ -854,17 +896,32 @@ private fun SourceScreen(
                             }
                             val jobId = UUID.randomUUID().toString()
                             projectLinks.link(jobId, project.projectId)
-                            val intent = MediaProcessingService.sourcePrepareIntent(
-                                context = context,
-                                url = uri.toString(),
-                                provider = com.gbw.android.domain.SourceProvider.OTHER,
-                                formatId = "",
-                                expectedDurationSeconds = 0.0,
-                                title = searchState.song.trim(),
-                                jobId = jobId,
-                            )
-                            ContextCompat.startForegroundService(context, intent)
-                            searchState.updateMessage("Preparando URL manual em segundo plano…")
+                            runCatching {
+                                SourcePreparationWorker.enqueue(
+                                    context = context,
+                                    jobId = jobId,
+                                    request = OnlineSourcePrepareRequest(
+                                        url = uri.toString(),
+                                        provider = com.gbw.android.domain.SourceProvider.OTHER,
+                                        formatId = "",
+                                        expectedDurationSeconds = 0.0,
+                                        title = searchState.song.trim(),
+                                    ),
+                                )
+                            }.onSuccess {
+                                sourceJobState = sourceJobStore.loadReconciled()
+                                searchState.postNotice(
+                                    SourceNoticePlacement.MANUAL_URL,
+                                    "Preparação iniciada. Você pode trocar de tela; a tarefa continuará.",
+                                )
+                            }.onFailure { error ->
+                                projectLinks.remove(jobId)
+                                searchState.postNotice(
+                                    SourceNoticePlacement.MANUAL_URL,
+                                    error.message ?: "Falha ao agendar a preparação da URL.",
+                                    isError = true,
+                                )
+                            }
                         }
                     },
                     enabled = manualUri != null &&
@@ -873,6 +930,7 @@ private fun SourceScreen(
                 ) {
                     Text("Usar URL e preparar")
                 }
+                SourceNoticeText(searchState.noticeFor(SourceNoticePlacement.MANUAL_URL))
             }
         }
 
@@ -906,7 +964,11 @@ private fun SourceScreen(
                         onSelectedUri(managed)
                         onContinue()
                     } catch (error: Exception) {
-                        searchState.updateMessage(error.message ?: "Falha ao incorporar a fonte local ao projeto.")
+                        searchState.postNotice(
+                            SourceNoticePlacement.LOCAL,
+                            error.message ?: "Falha ao incorporar a fonte local ao projeto.",
+                            isError = true,
+                        )
                     } finally {
                         incorporatingLocal = false
                     }
@@ -917,6 +979,20 @@ private fun SourceScreen(
             Text(if (incorporatingLocal) "Incorporando fonte…" else "Continuar para Separação")
         }
     }
+} 
+
+@Composable
+private fun SourceNoticeText(notice: SourceUiNotice?) {
+    notice ?: return
+    Text(
+        notice.message,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (notice.isError) {
+            MaterialTheme.colorScheme.error
+        } else {
+            MaterialTheme.colorScheme.primary
+        },
+    )
 }
 
 @Composable
@@ -1018,6 +1094,8 @@ private fun SeparationScreen(
     var exportBusy by remember { mutableStateOf(false) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
+    ToastMessage(exportMessage, long = true)
+    ToastMessage(resultMessage, long = true)
     var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
     var jobProjectId by remember { mutableStateOf<String?>(null) }
     var observedProjectId by remember { mutableStateOf<String?>(null) }
@@ -1053,8 +1131,7 @@ private fun SeparationScreen(
                             exportMessage = "Exportando $completed/$total • ${stemPublicLabel(stem)}…"
                         }
                         exportMessage =
-                            "Exportação concluída: ${summary.fileNames.size} WAVs • " +
-                                formatStemBytes(summary.totalBytes) + "."
+                            "${summary.fileNames.size} arquivos exportados com sucesso."
                     } catch (error: Exception) {
                         exportMessage = error.message ?: "Falha ao exportar os stems."
                     } finally {
@@ -1092,9 +1169,9 @@ private fun SeparationScreen(
                             val target = projectRepository.load(linkedProjectId)
                             if (target.separation?.jobId != freshJob.id) {
                                 val record = resultStore.load()?.takeIf { it.jobId == freshJob.id }
-                                    ?: error("Resultado Demucs concluído não foi encontrado.")
+                                    ?: error("O resultado da separação não foi encontrado.")
                                 val validated = SeparationResultFiles.validate(context.filesDir, record)
-                                    ?: error("Resultado Demucs concluído falhou na validação.")
+                                    ?: error("O resultado da separação não pôde ser validado.")
                                 projectRepository.publishSeparation(linkedProjectId, validated)
                             }
                         }
@@ -1153,7 +1230,7 @@ private fun SeparationScreen(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "O GBW Android usa exclusivamente Demucs htdemucs_6s para gerar seis stems.",
+            "Separe a música em bateria, baixo, outros, vocais, guitarra e piano.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -1191,9 +1268,9 @@ private fun SeparationScreen(
                     Text("Alterar na Fonte")
                 }
                 Text(
-                    "No primeiro uso, o GBW baixa aproximadamente 54,9 MB do htdemucs_6s " +
-                        "e valida tamanho + SHA-256 antes de processar.",
+                    "Na primeira separação, o GBW pode baixar os arquivos necessários do motor de áudio.",
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -1314,7 +1391,6 @@ private fun SeparationResultsCard(
     onTogglePreview: (com.gbw.android.separation.SeparationStem) -> Unit,
     onExport: () -> Unit,
 ) {
-    var showTechnical by rememberSaveable { mutableStateOf(false) }
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val durationSeconds = result.record.frames / 44_100.0
@@ -1347,45 +1423,6 @@ private fun SeparationResultsCard(
 
             Button(onClick = onExport, enabled = !appJobBusy && !exportBusy) {
                 Text(if (exportBusy) "Exportando…" else "Exportar os 6 stems…")
-            }
-
-            OutlinedButton(onClick = { showTechnical = !showTechnical }) {
-                Text(if (showTechnical) "Ocultar detalhes técnicos" else "Detalhes técnicos")
-            }
-
-            if (showTechnical) {
-                Text(
-                    "Motor: htdemucs_6s • WAV float32 • total ${formatStemBytes(result.totalBytes)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    "Runtime: ${result.record.runtimeIdentity.ifBlank { "Demucs Android" }}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (result.record.chunkCount > 0) {
-                    Text(
-                        "BLAS ${result.record.blasThreads} thread(s) • ${result.record.chunkCount} trechos • " +
-                            "mediana ${"%.1f".format(result.record.medianChunkMillis / 1_000.0)} s • " +
-                            "máx ${"%.1f".format(result.record.maxChunkMillis / 1_000.0)} s • " +
-                            "térmico ${DemucsRuntimeMonitor.thermalLabel(result.record.maxThermalStatus)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                result.stems.forEach { stem ->
-                    Text(
-                        "${stemPublicLabel(stem.name)}: ${stem.file.name} • ${formatStemBytes(stem.file.length())}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    "A cópia manual dos stems usa o seletor de pastas do Android; os arquivos internos do projeto permanecem preservados.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             exportMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
@@ -1461,10 +1498,12 @@ private fun SystemScreen() {
     val jobStore = remember(context) { JobStore(context) }
     var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
     var launchError by remember { mutableStateOf<String?>(null) }
+    ToastMessage(launchError, long = true)
     var workerExitSummary by remember {
         mutableStateOf(WorkerExitDiagnostics.latestSummary(context))
     }
     var showAdvanced by rememberSaveable { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (isActive) {
@@ -1482,7 +1521,7 @@ private fun SystemScreen() {
     ) {
         Text("Sistema", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Informações do aplicativo e ferramentas de diagnóstico.",
+            "Versão, estado do processamento e ferramentas de suporte.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -1499,6 +1538,27 @@ private fun SystemScreen() {
             }
         }
 
+        OutlinedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Histórico de atividades",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "Consulte operações concluídas, canceladas ou com erro.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = { showHistory = !showHistory }) {
+                    Text(if (showHistory) "Ocultar histórico" else "Ver histórico")
+                }
+                if (showHistory) {
+                    LogsScreen(embedded = true)
+                }
+            }
+        }
+
         OutlinedButton(onClick = { showAdvanced = !showAdvanced }) {
             Text(if (showAdvanced) "Ocultar diagnóstico avançado" else "Diagnóstico avançado")
         }
@@ -1511,8 +1571,7 @@ private fun SystemScreen() {
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    StatusLine("Baseline de referência", "Linux v5.23")
-                    StatusLine("Worker", ":media isolado")
+                    StatusLine("Processamento de mídia", "isolado do aplicativo")
                     StatusLine("ABI", "arm64-v8a")
                     StatusLine("Inspeção WAV", "Nativa")
                     StatusLine("FFmpeg", "Áudio / SAF")

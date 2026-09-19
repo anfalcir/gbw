@@ -9,6 +9,7 @@ import com.gbw.android.domain.SourceSearchRules
 import com.gbw.android.source.SourceDiscoveryResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -30,7 +31,7 @@ class SourceSearchViewModelTest {
     }
 
     @Test
-    fun `completed search keeps result state across configuration recreation`() {
+    fun `non-downloadable results are never exposed as primary online sources`() {
         val vm = SourceSearchViewModel(SavedStateHandle())
         vm.beginSearch()
         assertTrue(vm.searching)
@@ -39,20 +40,26 @@ class SourceSearchViewModelTest {
             SourceSearchRequest("Wolves At The Gate", "Enemy"),
             listOf(
                 SourceCandidateDraft(
-                    provider = SourceProvider.APPLE_MUSIC,
+                    provider = SourceProvider.OTHER,
                     title = "Enemy",
                     uploader = "Wolves At The Gate",
-                    url = "https://music.apple.com/test",
+                    url = "https://catalog.example.test/enemy",
                     durationSeconds = 197.0,
                     officialSignal = true,
+                    automaticDownloadSupported = false,
                 ),
             ),
         )
         vm.completeSearch(SourceDiscoveryResult(ranked))
 
         assertFalse(vm.searching)
-        assertEquals(1, vm.results.size)
-        assertTrue(vm.message.orEmpty().contains("1 resultado"))
+        assertTrue(vm.results.isEmpty())
+        assertTrue(
+            vm.noticeFor(SourceNoticePlacement.SEARCH)
+                ?.message
+                .orEmpty()
+                .contains("Nenhuma fonte utilizável")
+        )
         assertEquals("", vm.selectedUrl)
     }
 
@@ -76,5 +83,32 @@ class SourceSearchViewModelTest {
         vm.completeSearch(SourceDiscoveryResult(ranked))
         assertEquals("https://youtube.test/enemy", vm.selectedUrl)
         assertEquals("https://youtube.test/enemy", vm.selectedCandidate()?.url)
+    }
+
+    @Test
+    fun `switching project clears prior online results and contextual notices`() {
+        val vm = SourceSearchViewModel(SavedStateHandle())
+        vm.bindProject("11111111-1111-1111-1111-111111111111")
+        val ranked = SourceSearchRules.rank(
+            SourceSearchRequest("Wolves At The Gate", "Enemy"),
+            listOf(
+                SourceCandidateDraft(
+                    provider = SourceProvider.YOUTUBE,
+                    title = "Enemy",
+                    uploader = "Wolves At The Gate",
+                    url = "https://youtube.test/enemy",
+                    durationSeconds = 197.0,
+                    automaticDownloadSupported = true,
+                ),
+            ),
+        )
+        vm.completeSearch(SourceDiscoveryResult(ranked))
+        assertEquals(1, vm.results.size)
+
+        vm.bindProject("22222222-2222-2222-2222-222222222222")
+
+        assertTrue(vm.results.isEmpty())
+        assertEquals("", vm.selectedUrl)
+        assertNull(vm.noticeFor(SourceNoticePlacement.SEARCH))
     }
 }

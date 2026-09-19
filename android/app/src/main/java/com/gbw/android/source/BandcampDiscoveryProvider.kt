@@ -31,7 +31,6 @@ class SourceSearchCoordinator(
         listOf(
             BandcampDiscoveryProvider(),
             YtDlpDiscoveryProvider(context.applicationContext),
-            AppleMusicDiscoveryProvider(),
         ),
     )
 
@@ -43,6 +42,7 @@ class SourceSearchCoordinator(
         for (provider in providers) {
             try {
                 drafts += provider.search(request)
+                    .filter { it.automaticDownloadSupported && !it.previewOnly }
             } catch (error: Exception) {
                 warnings += error.message ?: "Uma fonte de pesquisa ficou indisponível."
             }

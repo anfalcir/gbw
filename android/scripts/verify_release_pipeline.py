@@ -19,8 +19,8 @@ for token in required_env:
 
 assert 'create("production")' in build
 assert 'signingConfig = signingConfigs.findByName("production")' in build
-assert 'versionName = "6.0.0-rc2"' in build
-assert 'versionCode = 23' in build
+assert 'versionName = "6.0.0-rc3"' in build
+assert 'versionCode = 24' in build
 
 assert "workflow_dispatch:" in workflow
 assert "\n  push:" not in workflow

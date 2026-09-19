@@ -6,11 +6,15 @@ import org.junit.Test
 
 class ForegroundServiceTypePolicyTest {
     @Test
-    fun android10AndNewerUsesDataSync() {
+    fun android10Through14UsesDataSync() {
         assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, ForegroundServiceTypePolicy.typeForSdk(29))
         assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, ForegroundServiceTypePolicy.typeForSdk(34))
-        assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, ForegroundServiceTypePolicy.typeForSdk(35))
-        assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, ForegroundServiceTypePolicy.typeForSdk(36))
+    }
+
+    @Test
+    fun android15AndNewerUsesMediaProcessing() {
+        assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING, ForegroundServiceTypePolicy.typeForSdk(35))
+        assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING, ForegroundServiceTypePolicy.typeForSdk(36))
     }
 
     @Test
@@ -22,6 +26,6 @@ class ForegroundServiceTypePolicyTest {
     fun labelMatchesPolicy() {
         assertEquals("legacy", ForegroundServiceTypePolicy.labelForSdk(28))
         assertEquals("dataSync", ForegroundServiceTypePolicy.labelForSdk(29))
-        assertEquals("dataSync", ForegroundServiceTypePolicy.labelForSdk(36))
+        assertEquals("mediaProcessing", ForegroundServiceTypePolicy.labelForSdk(36))
     }
 }

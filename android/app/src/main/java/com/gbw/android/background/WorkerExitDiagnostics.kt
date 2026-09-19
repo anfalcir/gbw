@@ -37,6 +37,9 @@ internal object WorkerExitDiagnostics {
     ): PersistedJob? {
         if (current == null) return null
         if (current.state != "RUNNING" && current.state != "CANCELLING") return current
+        // Online source preparation is owned by WorkManager in the app process.
+        // Historical exits of the isolated :media process must not invalidate it.
+        if (current.type == MediaProcessingService.SOURCE_PREPARE_TYPE) return current
         if (Build.VERSION.SDK_INT < 30) return current
 
         val now = System.currentTimeMillis()

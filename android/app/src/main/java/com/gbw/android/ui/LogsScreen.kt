@@ -40,7 +40,7 @@ import java.text.DateFormat
 import java.util.Date
 
 @Composable
-internal fun LogsScreen() {
+internal fun LogsScreen(embedded: Boolean = false) {
     val context = LocalContext.current
     val historyStore = remember(context) { JobHistoryStore(context) }
     val projectRepository = remember(context) { ProjectRepository(context) }
@@ -49,6 +49,7 @@ internal fun LogsScreen() {
     var projects by remember { mutableStateOf<Map<String, ProjectManifest>>(emptyMap()) }
     var confirmClear by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    ToastMessage(message)
 
     fun copyToClipboard(label: String, text: String) {
         val clipboard = context.getSystemService(ClipboardManager::class.java)
@@ -66,13 +67,21 @@ internal fun LogsScreen() {
         }
     }
 
+    val contentModifier =
+        if (embedded) Modifier.fillMaxWidth()
+        else Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        contentModifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Logs", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Histórico das tarefas executadas pelo GBW. Erros e interrupções ficam registrados para diagnóstico.",
+            if (embedded) "Histórico de atividades" else "Histórico de atividades",
+            style = if (embedded) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            "Acompanhe tarefas concluídas, canceladas ou com erro.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -101,7 +110,7 @@ internal fun LogsScreen() {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Nenhum log registrado", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "As próximas tarefas de fonte, separação, exportação e diagnóstico aparecerão aqui.",
+                        "As próximas atividades de fonte, separação e exportação aparecerão aqui.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

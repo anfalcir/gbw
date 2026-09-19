@@ -169,17 +169,17 @@ object OnlineSourcePreparer {
                 }
             }
 
-            onProgress(82, "Preparando WAV float32 estéreo/44,1 kHz…")
+            onProgress(82, "Preparando o áudio para separação…")
             val prepared = File(preparedDir, "original_44100_f32.wav")
             val command =
                 "-hide_banner -nostdin -y -v error -i " + quote(native.absolutePath) + " " +
                     "-map 0:a:0 -vn -ar 44100 -ac 2 -c:a pcm_f32le -f wav " + quote(prepared.absolutePath)
             LocalFfmpeg.execute(command, "Falha ao preparar a fonte baixada.")
             require(prepared.isFile && prepared.length() > 44L) {
-                "A preparação da fonte não gerou um WAV válido."
+                "A preparação da fonte não gerou um áudio válido."
             }
 
-            onProgress(94, "Validando o WAV preparado…")
+            onProgress(94, "Validando o áudio preparado…")
             val preparedProbe = probeAudio(prepared)
             require(preparedProbe.sampleRate == 44100 && preparedProbe.channels == 2) {
                 "A fonte preparada não ficou em estéreo/44,1 kHz."

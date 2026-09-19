@@ -18,7 +18,6 @@ import androidx.core.app.ServiceCompat
 import com.gbw.android.MainActivity
 import com.gbw.android.R
 import com.gbw.android.domain.OutputFormat
-import com.gbw.android.domain.SourceProvider
 import com.gbw.android.export.ProjectExportRenderer
 import com.gbw.android.project.ProjectJobLinkStore
 import com.gbw.android.project.ProjectRepository
@@ -27,9 +26,6 @@ import com.gbw.android.separation.DemucsSeparator
 import com.gbw.android.separation.DemucsRuntimeMonitor
 import com.gbw.android.separation.SeparationResultFiles
 import com.gbw.android.separation.SeparationResultStore
-import com.gbw.android.source.OnlineSourcePrepareRequest
-import com.gbw.android.source.OnlineSourcePreparer
-import com.gbw.android.source.PreparedSourceStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +43,6 @@ class MediaProcessingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var store: JobStore
     private lateinit var separationResults: SeparationResultStore
-    private lateinit var preparedSources: PreparedSourceStore
     private lateinit var projectLinks: ProjectJobLinkStore
     private lateinit var projects: ProjectRepository
 
@@ -55,7 +50,6 @@ class MediaProcessingService : Service() {
         super.onCreate()
         store = JobStore(this)
         separationResults = SeparationResultStore(this)
-        preparedSources = PreparedSourceStore(this)
         projectLinks = ProjectJobLinkStore(this)
         projects = ProjectRepository(this)
         ensureChannel()
@@ -71,12 +65,10 @@ class MediaProcessingService : Service() {
             when (action) {
                 ACTION_CANCEL -> cancelCurrent("Cancelado pelo usuário")
                 ACTION_SELF_TEST -> startSelfTest()
-                ACTION_SOURCE_PREPARE -> startSourcePrepare(requireNotNull(intent), flags)
                 ACTION_DEMUCS -> startDemucs(requireNotNull(intent), flags)
                 ACTION_PROJECT_EXPORT -> startProjectExport(requireNotNull(intent), flags)
             }
             if (
-                action == ACTION_SOURCE_PREPARE ||
                 action == ACTION_DEMUCS ||
                 action == ACTION_PROJECT_EXPORT
             ) {
@@ -165,83 +157,11 @@ class MediaProcessingService : Service() {
         }
     }
 
-    private fun startSourcePrepare(intent: Intent, startFlags: Int) {
-        if (activeJob?.isActive == true) return
-        val url = intent.getStringExtra(EXTRA_SOURCE_URL).orEmpty()
-        val provider = intent.getStringExtra(EXTRA_SOURCE_PROVIDER)?.let {
-            runCatching { SourceProvider.valueOf(it) }.getOrNull()
-        }
-        if (url.isBlank() || provider == null) {
-            saveInvalid(SOURCE_PREPARE_TYPE, "Preparar fonte", "Parâmetros inválidos para preparar a fonte online.")
-            return
-        }
-
-        val persisted = PersistedJob(
-            id = intent.getStringExtra(EXTRA_JOB_ID) ?: UUID.randomUUID().toString(),
-            type = SOURCE_PREPARE_TYPE,
-            label = "Preparar fonte",
-            state = "RUNNING",
-            progress = 0,
-            startedAt = System.currentTimeMillis(),
-            message = if ((startFlags and START_FLAG_REDELIVERY) != 0) {
-                "Retomando preparação da fonte após reinício do processo…"
-            } else {
-                "Inspecionando fonte online…"
-            },
-        )
-        store.save(persisted)
-        startAsForeground(notification(persisted))
-        acquireWakeLock()
-
-        val request = OnlineSourcePrepareRequest(
-            url = url,
-            provider = provider,
-            formatId = intent.getStringExtra(EXTRA_SOURCE_FORMAT_ID).orEmpty(),
-            expectedDurationSeconds = intent.getDoubleExtra(EXTRA_SOURCE_DURATION, 0.0),
-            title = intent.getStringExtra(EXTRA_SOURCE_TITLE).orEmpty(),
-        )
-
-        activeJob = scope.launch {
-            try {
-                val result = OnlineSourcePreparer.prepare(
-                    context = this@MediaProcessingService,
-                    request = request,
-                    jobId = persisted.id,
-                ) { progress, message ->
-                    updateJob(persisted, progress, message)
-                }
-                preparedSources.save(result)
-                projectLinks.projectId(persisted.id)?.let { projectId ->
-                    val record = requireNotNull(preparedSources.load()) {
-                        "Fonte preparada não pôde ser recarregada para publicação no projeto."
-                    }
-                    projects.adoptPreparedSource(
-                        projectId = projectId,
-                        record = record,
-                        name = result.title,
-                        activate = false,
-                    )
-                }
-                finishSuccess(
-                    persisted,
-                    "Fonte pronta • WAV float32 estéreo/44,1 kHz • " +
-                        "%.1fs".format(result.durationSeconds),
-                )
-            } catch (cancelled: CancellationException) {
-                finishCancelledIfRunning("Preparação da fonte cancelada; temporários removidos.")
-            } catch (error: Exception) {
-                finishError(persisted, error.message ?: "Falha inesperada ao preparar a fonte.")
-            } finally {
-                finishForegroundJob()
-            }
-        }
-    }
-
     private fun startDemucs(intent: Intent, startFlags: Int) {
         if (activeJob?.isActive == true) return
         val input = intent.getStringExtra(EXTRA_INPUT_URI)?.let(Uri::parse)
         if (input == null) {
-            saveInvalid(SeparationResultFiles.DEMUCS_TYPE, "Separação", "Arquivo de entrada inválido para Demucs.")
+            saveInvalid(SeparationResultFiles.DEMUCS_TYPE, "Separação", "O arquivo de entrada não está disponível para separação.")
             return
         }
 
@@ -255,7 +175,7 @@ class MediaProcessingService : Service() {
             message = if ((startFlags and START_FLAG_REDELIVERY) != 0) {
                 "Retomando a unidade de separação após reinício do processo…"
             } else {
-                "Preparando htdemucs_6s…"
+                "Preparando o motor de separação…"
             },
         )
         store.save(persisted)
@@ -272,11 +192,11 @@ class MediaProcessingService : Service() {
                 separationResults.saveDemucs(persisted.id, result)
                 projectLinks.projectId(persisted.id)?.let { projectId ->
                     val record = requireNotNull(separationResults.load()) {
-                        "Resultado Demucs não pôde ser recarregado para publicação no projeto."
+                        "O resultado da separação não pôde ser recuperado."
                     }
                     val validated = requireNotNull(
                         SeparationResultFiles.validate(filesDir, record)
-                    ) { "Resultado Demucs inválido antes da publicação no projeto." }
+                    ) { "O resultado da separação não pôde ser validado." }
                     projects.publishSeparation(projectId, validated)
                 }
                 val elapsedSeconds = result.elapsedMillis / 1_000L
@@ -397,7 +317,6 @@ class MediaProcessingService : Service() {
     private fun cancelCurrent(message: String) {
         val current = store.load()
         if (current != null && SeparationResultFiles.isDemucsType(current.type)) DemucsNative.cancel()
-        if (current?.type == SOURCE_PREPARE_TYPE) OnlineSourcePreparer.cancel(current.id)
         if (current != null && current.state == "RUNNING") {
             val cancelling = current.copy(
                 state = "CANCELLING",
@@ -446,7 +365,6 @@ class MediaProcessingService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) {
         val current = store.load()
         if (current != null && SeparationResultFiles.isDemucsType(current.type)) DemucsNative.cancel()
-        if (current?.type == SOURCE_PREPARE_TYPE) OnlineSourcePreparer.cancel(current.id)
         if (current != null) {
             store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
         }
@@ -492,9 +410,6 @@ class MediaProcessingService : Service() {
 
     override fun onDestroy() {
         if (::store.isInitialized && store.load()?.let { SeparationResultFiles.isDemucsType(it.type) } == true) DemucsNative.cancel()
-        if (::store.isInitialized) {
-            store.load()?.takeIf { it.type == SOURCE_PREPARE_TYPE }?.let { OnlineSourcePreparer.cancel(it.id) }
-        }
         activeJob?.cancel()
         releaseWakeLock()
         scope.cancel()
@@ -506,18 +421,12 @@ class MediaProcessingService : Service() {
     companion object {
         const val ACTION_SELF_TEST = "com.gbw.android.action.BACKGROUND_SELF_TEST"
         const val ACTION_CANCEL = "com.gbw.android.action.CANCEL_MEDIA_JOB"
-        const val ACTION_SOURCE_PREPARE = "com.gbw.android.action.SOURCE_PREPARE"
         const val ACTION_DEMUCS = "com.gbw.android.action.DEMUCS"
         const val ACTION_PROJECT_EXPORT = "com.gbw.android.action.PROJECT_EXPORT"
 
         private const val EXTRA_INPUT_URI = "input_uri"
         private const val EXTRA_OUTPUT_FORMAT = "output_format"
         private const val EXTRA_JOB_ID = "job_id"
-        private const val EXTRA_SOURCE_URL = "source_url"
-        private const val EXTRA_SOURCE_PROVIDER = "source_provider"
-        private const val EXTRA_SOURCE_FORMAT_ID = "source_format_id"
-        private const val EXTRA_SOURCE_DURATION = "source_duration"
-        private const val EXTRA_SOURCE_TITLE = "source_title"
         private const val EXTRA_PROJECT_ID = "project_id"
 
         const val SOURCE_PREPARE_TYPE = "source-prepare"
@@ -527,24 +436,6 @@ class MediaProcessingService : Service() {
         private const val CHANNEL_ID = "gbw_media_processing"
         private const val NOTIFICATION_ID = 2301
         private const val MAX_WAKE_LOCK_MS = 6L * 60L * 60L * 1000L
-
-        fun sourcePrepareIntent(
-            context: Context,
-            url: String,
-            provider: SourceProvider,
-            formatId: String = "",
-            expectedDurationSeconds: Double = 0.0,
-            title: String = "",
-            jobId: String = UUID.randomUUID().toString(),
-        ): Intent = Intent(context, MediaProcessingService::class.java)
-            .setAction(ACTION_SOURCE_PREPARE)
-            .putExtra(EXTRA_SOURCE_URL, url)
-            .putExtra(EXTRA_SOURCE_PROVIDER, provider.name)
-            .putExtra(EXTRA_SOURCE_FORMAT_ID, formatId)
-            .putExtra(EXTRA_SOURCE_DURATION, expectedDurationSeconds)
-            .putExtra(EXTRA_SOURCE_TITLE, title)
-            .putExtra(EXTRA_JOB_ID, jobId)
-
 
         fun projectExportIntent(
             context: Context,
