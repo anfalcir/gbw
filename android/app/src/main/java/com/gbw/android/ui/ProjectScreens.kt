@@ -53,6 +53,10 @@ import com.gbw.android.domain.OutputFormat
 import com.gbw.android.domain.Tunings
 import com.gbw.android.export.ProjectExportCopier
 import com.gbw.android.project.ProjectManifest
+import com.gbw.android.project.ProjectJobLinkStore
+import com.gbw.android.project.foldProjectSearchText
+import com.gbw.android.project.projectMatchesSearch
+import com.gbw.android.project.projectWorkflowStageLabel
 import com.gbw.android.project.ProjectRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -61,9 +65,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
+import java.util.UUID
 
 @Composable
-internal fun ProjectsScreen(onOpen: (String) -> Unit) {
+internal fun ProjectsScreen(
+    onOpen: (String) -> Unit,
+    onCreate: () -> Unit,
+) {
     val context = LocalContext.current
     val repo = remember(context) { ProjectRepository(context) }
     val dirtyStore = remember(context) { BackupDirtyStore(context) }
@@ -71,6 +79,7 @@ internal fun ProjectsScreen(onOpen: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     var projects by remember { mutableStateOf(repo.list()) }
     var activeId by remember { mutableStateOf(repo.active()?.projectId) }
+    var query by rememberSaveable { mutableStateOf("") }
     var renameTarget by remember { mutableStateOf<ProjectManifest?>(null) }
     var renameText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<ProjectManifest?>(null) }
@@ -83,9 +92,24 @@ internal fun ProjectsScreen(onOpen: (String) -> Unit) {
 
     LaunchedEffect(Unit) {
         while (isActive) {
-            refresh()
+            withContext(Dispatchers.IO) { refresh() }
             delay(1500)
         }
+    }
+
+    val filtered = remember(projects, query) {
+        projects
+            .filter { projectMatchesSearch(it, query) }
+            .sortedWith(
+                compareBy<ProjectManifest>(
+                    { foldProjectSearchText(it.artist) },
+                    { foldProjectSearchText(it.song) },
+                    { foldProjectSearchText(it.name) },
+                )
+            )
+    }
+    val groups = remember(filtered) {
+        filtered.groupBy { it.artist.ifBlank { "Sem artista" } }
     }
 
     Column(
@@ -94,65 +118,116 @@ internal fun ProjectsScreen(onOpen: (String) -> Unit) {
     ) {
         Text("Projetos", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Renomear mantém o mesmo projeto; duplicar cria uma identidade nova.",
+            "Cada projeto possui identidade interna própria. Duplicar cria uma nova cópia independente.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = { Text("Pesquisar por artista ou música") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            if (query.isBlank()) {
+                "${projects.size} projeto(s)"
+            } else {
+                "${filtered.size} de ${projects.size} projeto(s)"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
         if (projects.isEmpty()) {
-            OutlinedCard(Modifier.fillMaxWidth()) {
-                Text("Nenhum projeto criado ainda.", Modifier.padding(16.dp))
-            }
+            WorkflowEmptyState(
+                title = "Nenhum projeto criado",
+                message = "Comece pela Fonte para criar seu primeiro projeto.",
+                actionLabel = "Ir para Fonte",
+                onAction = onCreate,
+            )
+        } else if (filtered.isEmpty()) {
+            WorkflowEmptyState(
+                title = "Nenhum resultado",
+                message = "Nenhum artista ou música corresponde à pesquisa.",
+                actionLabel = "Limpar pesquisa",
+                onAction = { query = "" },
+            )
         }
-        projects.forEach { project ->
-            val dirty = dirtyStore.get(project.projectId) != null
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text(project.name, fontWeight = FontWeight.SemiBold)
-                    val meta = listOf(project.artist, project.song).filter { it.isNotBlank() }.joinToString(" — ")
-                    if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.bodySmall)
-                    Text(
-                        "Alterado: " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-                            .format(Date(project.updatedAtEpochMs)),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        when {
-                            dirty -> "Backup: pendente"
-                            project.lastSyncedRevisionId != null -> "Backup: sincronizado"
-                            else -> "Backup: somente local"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    if (project.projectId == activeId) {
-                        Text("Ativo", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
-                            scope.launch {
-                                try {
-                                    val p = withContext(Dispatchers.IO) { repo.setActive(project.projectId) }
-                                    val uri = withContext(Dispatchers.IO) {
-                                        repo.projectSourceUri(p.projectId)?.toString().orEmpty()
-                                    }
-                                    onOpen(uri)
-                                } catch (e: Exception) {
-                                    message = e.message
-                                }
-                            }
-                        }) { Text("Abrir") }
-                        if (project.artist.isBlank() || project.song.isBlank()) {
-                            OutlinedButton(onClick = {
-                                renameTarget = project
-                                renameText = project.name
-                            }) { Text("Renomear") }
+
+        groups.forEach { (artist, artistProjects) ->
+            Text(
+                "$artist • ${artistProjects.size}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            artistProjects.forEach { project ->
+                val dirty = dirtyStore.get(project.projectId) != null
+                val isActive = project.projectId == activeId
+                val backupLabel = when {
+                    dirty -> "Backup pendente"
+                    project.lastSyncedRevisionId != null -> "Backup sincronizado"
+                    else -> "Somente local"
+                }
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text(
+                            project.song.ifBlank { project.name },
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "Etapa: ${projectWorkflowStageLabel(project.workflowStage)} • $backupLabel",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Alterado: " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                                .format(Date(project.updatedAtEpochMs)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (isActive) {
+                            Text(
+                                "Projeto ativo",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
-                        OutlinedButton(onClick = {
-                            scope.launch {
-                                runCatching { withContext(Dispatchers.IO) { repo.duplicate(project.projectId) } }
-                                    .onFailure { message = it.message }
-                                refresh()
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                scope.launch {
+                                    try {
+                                        val p = withContext(Dispatchers.IO) {
+                                            if (isActive) repo.load(project.projectId) else repo.setActive(project.projectId)
+                                        }
+                                        val uri = withContext(Dispatchers.IO) {
+                                            repo.projectSourceUri(p.projectId)?.toString().orEmpty()
+                                        }
+                                        onOpen(uri)
+                                    } catch (e: Exception) {
+                                        message = e.message
+                                    }
+                                }
+                            }) { Text(if (isActive) "Continuar" else "Abrir") }
+                            if (project.artist.isBlank() || project.song.isBlank()) {
+                                OutlinedButton(onClick = {
+                                    renameTarget = project
+                                    renameText = project.name
+                                }) { Text("Renomear") }
                             }
-                        }) { Text("Duplicar") }
-                        TextButton(onClick = { deleteTarget = project }) { Text("Excluir") }
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    runCatching {
+                                        withContext(Dispatchers.IO) { repo.duplicate(project.projectId) }
+                                    }.onSuccess { copy ->
+                                        message = "Cópia criada: ${copy.name}"
+                                    }.onFailure { message = it.message }
+                                    refresh()
+                                }
+                            }) { Text("Duplicar") }
+                            TextButton(onClick = { deleteTarget = project }) { Text("Excluir") }
+                        }
                     }
                 }
             }
@@ -309,29 +384,48 @@ internal fun ProjectTuningScreen() {
 }
 
 @Composable
-internal fun ProjectExportScreen() {
+internal fun ProjectExportScreen(
+    onGoToSource: () -> Unit,
+    onGoToSeparation: () -> Unit,
+) {
     val context = LocalContext.current
     val repo = remember(context) { ProjectRepository(context) }
     val jobStore = remember(context) { JobStore(context) }
+    val projectLinks = remember(context) { ProjectJobLinkStore(context) }
     val scope = rememberCoroutineScope()
-    var project by remember { mutableStateOf(repo.active()) }
+    var project by remember { mutableStateOf<ProjectManifest?>(null) }
     var job by remember { mutableStateOf(jobStore.loadReconciled()) }
+    var jobProjectId by remember { mutableStateOf<String?>(null) }
+    var observedProjectId by remember { mutableStateOf<String?>(null) }
     var formatName by rememberSaveable { mutableStateOf(OutputFormat.FLAC_24.name) }
     var includeOriginal by rememberSaveable { mutableStateOf(true) }
     var includePitched by rememberSaveable { mutableStateOf(true) }
     var copyBusy by remember { mutableStateOf(false) }
+    var startingExport by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var handledTerminalJobId by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         while (isActive) {
-            project = repo.active()
-            val freshJob = jobStore.loadReconciled()
+            val freshProject = withContext(Dispatchers.IO) { repo.active() }
+            if (observedProjectId != freshProject?.projectId) {
+                observedProjectId = freshProject?.projectId
+                handledTerminalJobId = ""
+                message = null
+            }
+            project = freshProject
+
+            val freshJob = withContext(Dispatchers.IO) { jobStore.loadReconciled() }
             job = freshJob
+            val linkedProjectId = withContext(Dispatchers.IO) {
+                freshJob?.let { projectLinks.projectId(it.id) }
+            }
+            jobProjectId = linkedProjectId
             if (
                 freshJob?.type == MediaProcessingService.PROJECT_EXPORT_TYPE &&
                 freshJob.state !in setOf("RUNNING", "CANCELLING") &&
-                freshJob.id != handledTerminalJobId
+                freshJob.id != handledTerminalJobId &&
+                linkedProjectId == freshProject?.projectId
             ) {
                 handledTerminalJobId = freshJob.id
                 message = when (freshJob.state) {
@@ -339,7 +433,8 @@ internal fun ProjectExportScreen() {
                     "CANCELLED" -> "Exportação cancelada. Nenhum arquivo parcial foi mantido."
                     else -> freshJob.message
                 }
-                project = repo.active()
+                withContext(Dispatchers.IO) { projectLinks.remove(freshJob.id) }
+                project = withContext(Dispatchers.IO) { repo.active() }
             }
             delay(750)
         }
@@ -377,9 +472,24 @@ internal fun ProjectExportScreen() {
         Text("Exportação", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         val p = project
         if (p == null) {
-            Text("Abra ou crie um projeto primeiro.")
+            WorkflowEmptyState(
+                title = "Nenhum projeto aberto",
+                message = "Abra um projeto ou comece pela Fonte antes de exportar.",
+                actionLabel = "Ir para Fonte",
+                onAction = onGoToSource,
+            )
             return@Column
         }
+        if (p.separation == null) {
+            WorkflowEmptyState(
+                title = "Separação necessária",
+                message = "Este projeto ainda não possui os seis stems do Demucs.",
+                actionLabel = if (p.source == null) "Ir para Fonte" else "Ir para Separação",
+                onAction = if (p.source == null) onGoToSource else onGoToSeparation,
+            )
+            return@Column
+        }
+
         Text(
             "Produto final: backing + guitar. O pico da recombinação define um único ganho compartilhado.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -408,24 +518,40 @@ internal fun ProjectExportScreen() {
             }
         }
 
-        val exportJob = job?.takeIf { it.type == MediaProcessingService.PROJECT_EXPORT_TYPE }
+        val exportJob = job?.takeIf {
+            it.type == MediaProcessingService.PROJECT_EXPORT_TYPE && jobProjectId == p.projectId
+        }
         val busy = exportJob?.state == "RUNNING" || exportJob?.state == "CANCELLING"
         Button(
             onClick = {
-                ContextCompat.startForegroundService(
-                    context,
-                    MediaProcessingService.projectExportIntent(
-                        context,
-                        p.projectId,
-                        includeOriginal,
-                        includePitched,
-                        OutputFormat.valueOf(formatName),
-                    ),
-                )
-                message = "Exportação iniciada em segundo plano."
+                if (startingExport) return@Button
+                startingExport = true
+                scope.launch {
+                    val jobId = UUID.randomUUID().toString()
+                    try {
+                        withContext(Dispatchers.IO) { projectLinks.link(jobId, p.projectId) }
+                        ContextCompat.startForegroundService(
+                            context,
+                            MediaProcessingService.projectExportIntent(
+                                context,
+                                p.projectId,
+                                includeOriginal,
+                                includePitched,
+                                OutputFormat.valueOf(formatName),
+                                jobId,
+                            ),
+                        )
+                        message = "Exportação iniciada em segundo plano."
+                    } catch (error: Exception) {
+                        withContext(Dispatchers.IO) { projectLinks.remove(jobId) }
+                        message = error.message ?: "Falha ao iniciar a exportação."
+                    } finally {
+                        startingExport = false
+                    }
+                }
             },
-            enabled = p.separation != null && !busy && (includeOriginal || includePitched),
-        ) { Text(if (busy) "Exportando…" else "Gerar backing + guitar") }
+            enabled = !busy && !startingExport && (includeOriginal || includePitched),
+        ) { Text(if (busy || startingExport) "Exportando…" else "Gerar backing + guitar") }
 
         exportJob?.takeIf { it.state == "RUNNING" || it.state == "CANCELLING" }?.let { current ->
             OutlinedCard(Modifier.fillMaxWidth()) {
@@ -458,6 +584,22 @@ internal fun ProjectExportScreen() {
             }
         }
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+    }
+}
+
+@Composable
+internal fun WorkflowEmptyState(
+    title: String,
+    message: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onAction) { Text(actionLabel) }
+        }
     }
 }
 

@@ -68,6 +68,10 @@ jobs:
         working-directory: android
         run: bash scripts/validate_domain.sh
 
+      - name: Project-scoped workflow gate
+        working-directory: android
+        run: python3 scripts/verify_project_scoped_workflow.py
+
       - name: Rubber Band R3 host golden smoke
         working-directory: android
         run: bash scripts/validate_rubberband_host.sh

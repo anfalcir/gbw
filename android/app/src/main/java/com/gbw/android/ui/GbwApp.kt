@@ -39,6 +39,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -123,11 +125,11 @@ fun GbwApp() {
             var sourceUri by rememberSaveable { mutableStateOf("") }
             var projectSession by rememberSaveable { mutableStateOf(0) }
             var activeProject by remember { mutableStateOf<ProjectManifest?>(null) }
-            var shellMessage by remember { mutableStateOf<String?>(null) }
             var mediaJobBusy by remember { mutableStateOf(false) }
             val context = LocalContext.current
             val projectRepository = remember(context) { ProjectRepository(context) }
             val shellJobStore = remember(context) { JobStore(context) }
+            val snackbarHostState = remember { SnackbarHostState() }
 
             LaunchedEffect(Unit) {
                 withContext(Dispatchers.IO) {
@@ -135,19 +137,18 @@ fun GbwApp() {
                     projectRepository.normalizeStoredMetadata()
                 }
                 BackupScheduler.applySettings(context, BackupSettingsStore(context).load())
-                activeProject = withContext(Dispatchers.IO) { projectRepository.active() }
-                if (sourceUri.isBlank()) {
-                    sourceUri = withContext(Dispatchers.IO) {
-                        activeProject?.let { projectRepository.projectSourceUri(it.projectId)?.toString() }.orEmpty()
-                    }
+                val initialProject = withContext(Dispatchers.IO) { projectRepository.active() }
+                activeProject = initialProject
+                sourceUri = withContext(Dispatchers.IO) {
+                    initialProject?.let { projectRepository.projectSourceUri(it.projectId)?.toString() }.orEmpty()
                 }
                 while (isActive) {
                     val latestProject = withContext(Dispatchers.IO) { projectRepository.active() }
-                    if (
-                        latestProject != null &&
-                        activeProject?.projectId != latestProject.projectId
-                    ) {
-                        shellMessage = null
+                    if (activeProject?.projectId != latestProject?.projectId) {
+                        sourceUri = withContext(Dispatchers.IO) {
+                            latestProject?.let { projectRepository.projectSourceUri(it.projectId)?.toString() }.orEmpty()
+                        }
+                        projectSession += 1
                     }
                     activeProject = latestProject
                     val currentJob = withContext(Dispatchers.IO) { shellJobStore.loadReconciled() }
@@ -155,47 +156,50 @@ fun GbwApp() {
                     delay(750)
                 }
             }
+
             val current = AppPage.valueOf(page)
             val configuration = LocalConfiguration.current
             val wide = configuration.screenWidthDp >= 840
             val drawerState = rememberDrawerState(DrawerValue.Closed)
             val scope = rememberCoroutineScope()
+            val closeProject: () -> Unit = {
+                if (!mediaJobBusy) {
+                    scope.launch {
+                        withContext(Dispatchers.IO) { projectRepository.closeActive() }
+                        sourceUri = ""
+                        activeProject = null
+                        projectSession += 1
+                        page = AppPage.SOURCE.name
+                        snackbarHostState.showSnackbar("Projeto fechado.")
+                    }
+                }
+            }
+            val contextChanged: () -> Unit = { projectSession += 1 }
 
             if (wide) {
-                Row(Modifier.fillMaxSize()) {
-                    SideBar(
-                        current = current,
-                        activeProject = activeProject,
-                        projectBusy = mediaJobBusy,
-                        shellMessage = shellMessage,
-                        onSelect = { page = it.name },
-                        onCloseProject = {
-                            if (!mediaJobBusy) {
-                                scope.launch {
-                                    withContext(Dispatchers.IO) { projectRepository.closeActive() }
-                                    sourceUri = ""
-                                    activeProject = null
-                                    projectSession += 1
-                                    page = AppPage.SOURCE.name
-                                    shellMessage = "Projeto fechado. O GBW voltou ao estado inicial."
-                                }
-                            }
-                        },
-                        modifier = Modifier.width(260.dp).fillMaxHeight(),
-                    )
-                    Divider(Modifier.fillMaxHeight().width(1.dp))
-                    PageContent(
-                        page = current,
-                        sourceUri = sourceUri,
-                        onSourceUriChange = { sourceUri = it },
-                        onNavigate = { page = it.name },
-                        projectSession = projectSession,
-                        onProjectContextChanged = {
-                            projectSession += 1
-                            activeProject = projectRepository.active()
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
+                Scaffold(
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                ) { scaffoldPadding ->
+                    Row(Modifier.fillMaxSize().padding(scaffoldPadding)) {
+                        SideBar(
+                            current = current,
+                            activeProject = activeProject,
+                            projectBusy = mediaJobBusy,
+                            onSelect = { page = it.name },
+                            onCloseProject = closeProject,
+                            modifier = Modifier.width(260.dp).fillMaxHeight(),
+                        )
+                        Divider(Modifier.fillMaxHeight().width(1.dp))
+                        PageContent(
+                            page = current,
+                            sourceUri = sourceUri,
+                            onSourceUriChange = { sourceUri = it },
+                            onNavigate = { page = it.name },
+                            projectSession = projectSession,
+                            onProjectContextChanged = contextChanged,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             } else {
                 ModalNavigationDrawer(
@@ -206,23 +210,13 @@ fun GbwApp() {
                                 current = current,
                                 activeProject = activeProject,
                                 projectBusy = mediaJobBusy,
-                                shellMessage = shellMessage,
                                 onSelect = {
                                     page = it.name
                                     scope.launch { drawerState.close() }
                                 },
                                 onCloseProject = {
-                                    if (!mediaJobBusy) {
-                                        scope.launch {
-                                            withContext(Dispatchers.IO) { projectRepository.closeActive() }
-                                            sourceUri = ""
-                                            activeProject = null
-                                            projectSession += 1
-                                            page = AppPage.SOURCE.name
-                                            shellMessage = "Projeto fechado. O GBW voltou ao estado inicial."
-                                            drawerState.close()
-                                        }
-                                    }
+                                    closeProject()
+                                    scope.launch { drawerState.close() }
                                 },
                                 modifier = Modifier.width(300.dp).fillMaxHeight(),
                             )
@@ -230,6 +224,7 @@ fun GbwApp() {
                     },
                 ) {
                     Scaffold(
+                        snackbarHost = { SnackbarHost(snackbarHostState) },
                         topBar = {
                             TopAppBar(
                                 title = {
@@ -250,10 +245,7 @@ fun GbwApp() {
                             onSourceUriChange = { sourceUri = it },
                             onNavigate = { page = it.name },
                             projectSession = projectSession,
-                            onProjectContextChanged = {
-                                projectSession += 1
-                                activeProject = projectRepository.active()
-                            },
+                            onProjectContextChanged = contextChanged,
                             modifier = Modifier.padding(padding),
                         )
                     }
@@ -268,7 +260,6 @@ private fun SideBar(
     current: AppPage,
     activeProject: ProjectManifest?,
     projectBusy: Boolean,
-    shellMessage: String?,
     onSelect: (AppPage) -> Unit,
     onCloseProject: () -> Unit,
     modifier: Modifier = Modifier,
@@ -307,13 +298,6 @@ private fun SideBar(
             ) {
                 Text(if (projectBusy) "Tarefa em andamento" else "Fechar projeto")
             }
-        }
-        shellMessage?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
         }
         Spacer(Modifier.height(8.dp))
         var lastGroup = ""
@@ -355,18 +339,25 @@ private fun PageContent(
                     onSelectedUri = onSourceUriChange,
                     onContinue = { onNavigate(AppPage.SEPARATION) },
                     projectSession = projectSession,
+                    onProjectContextChanged = onProjectContextChanged,
                 )
                 AppPage.SEPARATION -> SeparationScreen(
-                    initialUriText = sourceUri,
-                    onUriChanged = onSourceUriChange,
+                    projectSession = projectSession,
+                    onGoToSource = { onNavigate(AppPage.SOURCE) },
                 )
                 AppPage.TUNING -> ProjectTuningScreen()
-                AppPage.EXPORT -> ProjectExportScreen()
-                AppPage.PROJECTS -> ProjectsScreen { uri ->
-                    onSourceUriChange(uri)
-                    onProjectContextChanged()
-                    onNavigate(AppPage.SOURCE)
-                }
+                AppPage.EXPORT -> ProjectExportScreen(
+                    onGoToSource = { onNavigate(AppPage.SOURCE) },
+                    onGoToSeparation = { onNavigate(AppPage.SEPARATION) },
+                )
+                AppPage.PROJECTS -> ProjectsScreen(
+                    onOpen = { uri ->
+                        onSourceUriChange(uri)
+                        onProjectContextChanged()
+                        onNavigate(AppPage.SOURCE)
+                    },
+                    onCreate = { onNavigate(AppPage.SOURCE) },
+                )
                 AppPage.LOGS -> PlaceholderScreen("Logs", "Logs de jobs e processamento serão persistidos por operação.")
                 AppPage.FILE_PITCH -> FilePitchScreen()
                 AppPage.SETTINGS -> BackupSettingsScreen()
@@ -382,6 +373,7 @@ private fun SourceScreen(
     onSelectedUri: (String) -> Unit,
     onContinue: () -> Unit,
     projectSession: Int,
+    onProjectContextChanged: () -> Unit,
 ) {
     val context = LocalContext.current
     var inspection by remember { mutableStateOf<AudioInspection?>(null) }
@@ -395,6 +387,8 @@ private fun SourceScreen(
     val projectRepository = remember(context) { ProjectRepository(context) }
     val projectLinks = remember(context) { ProjectJobLinkStore(context) }
     var sourceJobState by remember { mutableStateOf(sourceJobStore.loadReconciled()) }
+    var sourceJobProjectId by remember { mutableStateOf<String?>(null) }
+    var activeProjectId by remember { mutableStateOf<String?>(null) }
     var incorporatingLocal by remember { mutableStateOf(false) }
     var consumedPreparedJobId by rememberSaveable { mutableStateOf("") }
     var handledSourceTerminalJobId by rememberSaveable { mutableStateOf("") }
@@ -405,6 +399,7 @@ private fun SourceScreen(
 
     LaunchedEffect(projectSession) {
         val active = withContext(Dispatchers.IO) { projectRepository.active() }
+        activeProjectId = active?.projectId
         if (active == null) {
             searchState.resetSession()
         } else {
@@ -413,7 +408,7 @@ private fun SourceScreen(
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
+        if (uri != null && !incorporatingLocal) {
             try {
                 context.contentResolver.takePersistableUriPermission(
                     uri,
@@ -421,40 +416,91 @@ private fun SourceScreen(
                 )
             } catch (_: Exception) {
             }
-            onSelectedUri(uri.toString())
+            incorporatingLocal = true
+            onlineScope.launch {
+                try {
+                    val displayName = audioDisplayName(context, uri.toString())
+                    val project = withContext(Dispatchers.IO) {
+                        projectRepository.adoptLocalSource(
+                            uri = uri,
+                            displayNameHint = displayName,
+                            name = searchState.song.ifBlank { displayName ?: "Novo projeto" },
+                            artist = searchState.artist,
+                            song = searchState.song,
+                        )
+                    }
+                    val managed = withContext(Dispatchers.IO) {
+                        requireNotNull(projectRepository.projectSourceUri(project.projectId)).toString()
+                    }
+                    activeProjectId = project.projectId
+                    onSelectedUri(managed)
+                    onProjectContextChanged()
+                    searchState.updateMessage("Fonte local incorporada ao projeto.")
+                } catch (error: Exception) {
+                    searchState.updateMessage(error.message ?: "Falha ao incorporar a fonte local.")
+                } finally {
+                    incorporatingLocal = false
+                }
+            }
         }
     }
 
     LaunchedEffect(Unit) {
         while (isActive) {
-            sourceJobState = sourceJobStore.loadReconciled()
-            val job = sourceJobState
+            val job = withContext(Dispatchers.IO) { sourceJobStore.loadReconciled() }
+            sourceJobState = job
+            val linkedProjectId = withContext(Dispatchers.IO) {
+                job?.let { projectLinks.projectId(it.id) }
+            }
+            sourceJobProjectId = linkedProjectId
+            activeProjectId = withContext(Dispatchers.IO) { projectRepository.active()?.projectId }
+
             if (
                 job?.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
                 job.state == "SUCCESS" &&
                 job.id != consumedPreparedJobId
             ) {
-                val prepared = preparedSourceStore.load()
-                if (prepared?.jobId == job.id && prepared.preparedFile().isFile) {
+                val prepared = withContext(Dispatchers.IO) { preparedSourceStore.load() }
+                if (
+                    prepared?.jobId == job.id &&
+                    prepared.preparedFile().isFile &&
+                    linkedProjectId != null
+                ) {
                     try {
                         val project = withContext(Dispatchers.IO) {
-                            projectLinks.projectId(job.id)?.let(projectRepository::setActive)
-                            projectRepository.adoptPreparedSource(
-                                record = prepared,
-                                name = searchState.song.ifBlank { prepared.title },
-                                artist = searchState.artist,
-                                song = searchState.song,
-                            )
+                            val existing = projectRepository.load(linkedProjectId)
+                            if (
+                                existing.source?.preparedRelativePath == null ||
+                                existing.source.sourceUrl != prepared.sourceUrl
+                            ) {
+                                projectRepository.adoptPreparedSource(
+                                    projectId = linkedProjectId,
+                                    record = prepared,
+                                    name = prepared.title,
+                                    activate = false,
+                                )
+                            } else {
+                                existing
+                            }
                         }
-                        val managedUri = withContext(Dispatchers.IO) {
-                            requireNotNull(projectRepository.projectSourceUri(project.projectId)).toString()
-                        }
-                        projectLinks.remove(job.id)
                         consumedPreparedJobId = job.id
-                        autoContinuePrepared = true
-                        onSelectedUri(managedUri)
                         handledSourceTerminalJobId = job.id
-                        searchState.updateMessage("Fonte online incorporada ao projeto e preparada com sucesso.")
+                        withContext(Dispatchers.IO) { projectLinks.remove(job.id) }
+
+                        val stillActive = withContext(Dispatchers.IO) {
+                            projectRepository.active()?.projectId == project.projectId
+                        }
+                        if (stillActive) {
+                            val managedUri = withContext(Dispatchers.IO) {
+                                requireNotNull(projectRepository.projectSourceUri(project.projectId)).toString()
+                            }
+                            activeProjectId = project.projectId
+                            autoContinuePrepared = true
+                            onSelectedUri(managedUri)
+                            onProjectContextChanged()
+                            searchState.syncIdentity(project.artist, project.song)
+                            searchState.updateMessage("Fonte online incorporada ao projeto e preparada com sucesso.")
+                        }
                     } catch (error: Exception) {
                         handledSourceTerminalJobId = job.id
                         searchState.updateMessage(error.message ?: "Falha ao incorporar a fonte ao projeto.")
@@ -462,9 +508,14 @@ private fun SourceScreen(
                 } else {
                     consumedPreparedJobId = job.id
                     handledSourceTerminalJobId = job.id
-                    searchState.updateMessage(
-                        "A preparação terminou, mas o arquivo preparado não foi encontrado. Tente novamente."
-                    )
+                    linkedProjectId?.let {
+                        withContext(Dispatchers.IO) { projectLinks.remove(job.id) }
+                    }
+                    if (linkedProjectId == activeProjectId || linkedProjectId == null) {
+                        searchState.updateMessage(
+                            "A preparação terminou, mas o resultado não possui vínculo íntegro com o projeto. Tente novamente."
+                        )
+                    }
                 }
             } else if (
                 job?.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
@@ -472,7 +523,12 @@ private fun SourceScreen(
                 job.id != handledSourceTerminalJobId
             ) {
                 handledSourceTerminalJobId = job.id
-                searchState.updateMessage(job.message)
+                if (linkedProjectId == activeProjectId || linkedProjectId == null) {
+                    searchState.updateMessage(job.message)
+                }
+                linkedProjectId?.let {
+                    withContext(Dispatchers.IO) { projectLinks.remove(job.id) }
+                }
             }
             delay(750)
         }
@@ -512,7 +568,10 @@ private fun SourceScreen(
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Arquivo local", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Button(onClick = { picker.launch(arrayOf("audio/*")) }) {
+                Button(
+                    onClick = { picker.launch(arrayOf("audio/*")) },
+                    enabled = !incorporatingLocal,
+                ) {
                     Text(if (selectedUriText.isBlank()) "Selecionar áudio…" else "Trocar áudio…")
                 }
                 if (selectedUriText.isNotBlank()) {
@@ -652,6 +711,7 @@ private fun SourceScreen(
                 val selectedCandidate = searchState.selectedCandidate()
                 val sourceJobRunning =
                     sourceJobState?.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
+                        sourceJobProjectId == activeProjectId &&
                         (sourceJobState?.state == "RUNNING" || sourceJobState?.state == "CANCELLING")
                 if (selectedCandidate != null) {
                     Text(
@@ -705,6 +765,7 @@ private fun SourceScreen(
 
                 sourceJobState?.takeIf {
                     it.type == MediaProcessingService.SOURCE_PREPARE_TYPE &&
+                        sourceJobProjectId == activeProjectId &&
                         it.state in setOf("RUNNING", "CANCELLING")
                 }?.let { job ->
                     OutlinedCard(Modifier.fillMaxWidth()) {
@@ -958,8 +1019,8 @@ private fun PlaceholderScreen(title: String, text: String) {
 
 @Composable
 private fun SeparationScreen(
-    initialUriText: String,
-    onUriChanged: (String) -> Unit,
+    projectSession: Int,
+    onGoToSource: () -> Unit,
 ) {
     val context = LocalContext.current
     val jobStore = remember(context) { JobStore(context) }
@@ -968,16 +1029,19 @@ private fun SeparationScreen(
     val projectLinks = remember(context) { ProjectJobLinkStore(context) }
     val previewPlayer = remember { StemPreviewPlayer() }
     val scope = rememberCoroutineScope()
+    var activeProject by remember { mutableStateOf<ProjectManifest?>(null) }
+    var sourceUri by remember { mutableStateOf("") }
     var availableResult by remember { mutableStateOf<ValidatedSeparationResult?>(null) }
     var playingStem by remember { mutableStateOf<String?>(null) }
     var exportBusy by remember { mutableStateOf(false) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
-    var uriText by rememberSaveable(initialUriText) { mutableStateOf(initialUriText) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
+    var jobProjectId by remember { mutableStateOf<String?>(null) }
+    var observedProjectId by remember { mutableStateOf<String?>(null) }
     var startingSeparation by remember { mutableStateOf(false) }
-    val selectedDisplayName = remember(uriText) {
-        uriText.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
+    val selectedDisplayName = remember(sourceUri) {
+        sourceUri.takeIf { it.isNotBlank() }?.let { audioDisplayName(context, it) }
     }
 
     DisposableEffect(previewPlayer) {
@@ -1018,71 +1082,82 @@ private fun SeparationScreen(
             }
         }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            } catch (_: Exception) {
-            }
-            uriText = uri.toString()
-            onUriChanged(uriText)
-            resultMessage = null
-        }
-    }
-
     LaunchedEffect(resultMessage) {
         if (resultMessage == SEPARATION_STARTED_MESSAGE) {
             delay(3_500)
-            if (resultMessage == SEPARATION_STARTED_MESSAGE) {
-                resultMessage = null
-            }
+            if (resultMessage == SEPARATION_STARTED_MESSAGE) resultMessage = null
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(projectSession) {
         while (isActive) {
-            jobState = jobStore.loadReconciled()
-            val storedRecord = resultStore.load()
-            if (storedRecord?.jobId != availableResult?.record?.jobId) {
-                val validated = storedRecord?.let {
-                    SeparationResultFiles.validate(context.filesDir, it)
-                }
-                if (validated != null) {
-                    projectLinks.projectId(validated.record.jobId)?.let { projectId ->
-                        try {
-                            withContext(Dispatchers.IO) {
-                                projectRepository.publishSeparation(projectId, validated)
+            val freshJob = withContext(Dispatchers.IO) { jobStore.loadReconciled() }
+            jobState = freshJob
+            val linkedProjectId = withContext(Dispatchers.IO) {
+                freshJob?.let { projectLinks.projectId(it.id) }
+            }
+            jobProjectId = linkedProjectId
+
+            if (
+                freshJob != null &&
+                SeparationResultFiles.isDemucsType(freshJob.type) &&
+                freshJob.state !in setOf("RUNNING", "CANCELLING") &&
+                linkedProjectId != null
+            ) {
+                if (freshJob.state == "SUCCESS") {
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            val target = projectRepository.load(linkedProjectId)
+                            if (target.separation?.jobId != freshJob.id) {
+                                val record = resultStore.load()?.takeIf { it.jobId == freshJob.id }
+                                    ?: error("Resultado Demucs concluído não foi encontrado.")
+                                val validated = SeparationResultFiles.validate(context.filesDir, record)
+                                    ?: error("Resultado Demucs concluído falhou na validação.")
+                                projectRepository.publishSeparation(linkedProjectId, validated)
                             }
-                            projectLinks.remove(validated.record.jobId)
-                        } catch (error: Exception) {
+                        }
+                    }.onFailure { error ->
+                        if (projectRepository.active()?.projectId == linkedProjectId) {
                             resultMessage = error.message ?: "Falha ao publicar stems no projeto."
                         }
                     }
                 }
-                availableResult = validated
+                val activeId = withContext(Dispatchers.IO) { projectRepository.active()?.projectId }
+                if (activeId == linkedProjectId) {
+                    resultMessage = when (freshJob.state) {
+                        "SUCCESS" -> "Separação concluída. Os seis stems pertencem a este projeto."
+                        "CANCELLED" -> "Separação cancelada. Nenhum stem parcial foi mantido."
+                        else -> freshJob.message
+                    }
+                }
+                withContext(Dispatchers.IO) { projectLinks.remove(freshJob.id) }
             }
-            if (availableResult == null) {
-                availableResult = jobState
-                    ?.takeIf {
-                        it.state == "SUCCESS" && SeparationResultFiles.isDemucsType(it.type)
-                    }
-                    ?.let {
-                        resultStore.recoverExisting(
-                            jobId = it.id,
-                            type = it.type,
-                            startedAt = it.startedAt,
-                            message = it.message,
-                        )
-                    }
+
+            val latestProject = withContext(Dispatchers.IO) { projectRepository.active() }
+            if (observedProjectId != latestProject?.projectId) {
+                observedProjectId = latestProject?.projectId
+                previewPlayer.stop()
+                playingStem = null
+                resultMessage = null
+                exportMessage = null
+            }
+            activeProject = latestProject
+            sourceUri = withContext(Dispatchers.IO) {
+                latestProject?.let { projectRepository.projectSourceUri(it.projectId)?.toString() }.orEmpty()
+            }
+            availableResult = withContext(Dispatchers.IO) {
+                latestProject?.let { projectRepository.projectSeparationResult(it.projectId) }
             }
             delay(500)
         }
     }
 
-    val separationJob = jobState?.takeIf { SeparationResultFiles.isDemucsType(it.type) }
+    val p = activeProject
+    val separationJob = jobState?.takeIf {
+        p != null &&
+            SeparationResultFiles.isDemucsType(it.type) &&
+            jobProjectId == p.projectId
+    }
     val appJobBusy =
         jobState?.state == "RUNNING" || jobState?.state == "CANCELLING"
 
@@ -1096,10 +1171,28 @@ private fun SeparationScreen(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "O GBW Android usa exclusivamente Demucs htdemucs_6s para gerar seis stems. " +
-                "O arquivo selecionado em Fonte é reaproveitado automaticamente.",
+            "O GBW Android usa exclusivamente Demucs htdemucs_6s para gerar seis stems.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        if (p == null) {
+            WorkflowEmptyState(
+                title = "Nenhum projeto aberto",
+                message = "A Separação só mostra conteúdo do projeto ativo.",
+                actionLabel = "Ir para Fonte",
+                onAction = onGoToSource,
+            )
+            return@Column
+        }
+        if (sourceUri.isBlank()) {
+            WorkflowEmptyState(
+                title = "Fonte necessária",
+                message = "Este projeto ainda não possui uma fonte preparada.",
+                actionLabel = "Ir para Fonte",
+                onAction = onGoToSource,
+            )
+            return@Column
+        }
 
         Card(Modifier.fillMaxWidth()) {
             Column(
@@ -1107,30 +1200,17 @@ private fun SeparationScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    "Arquivo para separar",
+                    "Fonte do projeto",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Button(
-                    onClick = { picker.launch(arrayOf("audio/*")) },
-                    enabled = !appJobBusy,
-                ) {
-                    Text(if (uriText.isBlank()) "Selecionar áudio…" else "Trocar áudio…")
-                }
-                if (uriText.isNotBlank()) {
-                    Text(
-                        selectedDisplayName ?: "Arquivo selecionado",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                Text(selectedDisplayName ?: p.source?.title.orEmpty().ifBlank { "Arquivo do projeto" })
+                OutlinedButton(onClick = onGoToSource, enabled = !appJobBusy) {
+                    Text("Alterar na Fonte")
                 }
                 Text(
                     "No primeiro uso, o GBW baixa aproximadamente 54,9 MB do htdemucs_6s " +
                         "e valida tamanho + SHA-256 antes de processar.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    "O áudio é preparado em float32 estéreo/44,1 kHz. A inferência usa um " +
-                        "modelo por vez, com BLAS interno controlado e stems gravados por streaming.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -1138,51 +1218,40 @@ private fun SeparationScreen(
 
         Button(
             onClick = {
-                val input = uriText.takeIf { it.isNotBlank() }?.let(Uri::parse)
-                if (input == null) {
-                    resultMessage = "Selecione um arquivo de áudio antes de iniciar."
-                } else if (!startingSeparation) {
-                    startingSeparation = true
-                    scope.launch {
-                        var jobId: String? = null
-                        try {
-                            val prepared = withContext(Dispatchers.IO) {
-                                val active = projectRepository.active()
-                                val activeUri = active?.let { projectRepository.projectSourceUri(it.projectId)?.toString() }
-                                val project = if (active != null && activeUri == input.toString()) {
-                                    active
-                                } else {
-                                    projectRepository.adoptLocalSource(
-                                        uri = input,
-                                        displayNameHint = selectedDisplayName,
-                                        name = selectedDisplayName ?: "Novo projeto",
-                                        artist = active?.artist.orEmpty(),
-                                        song = active?.song.orEmpty(),
-                                    )
-                                }
-                                val managedUri = requireNotNull(projectRepository.projectSourceUri(project.projectId))
-                                val newJobId = UUID.randomUUID().toString()
-                                projectLinks.link(newJobId, project.projectId)
-                                Triple(project, managedUri, newJobId)
+                if (startingSeparation) return@Button
+                startingSeparation = true
+                scope.launch {
+                    var jobId: String? = null
+                    try {
+                        val prepared = withContext(Dispatchers.IO) {
+                            val current = requireNotNull(projectRepository.active()) {
+                                "Nenhum projeto ativo."
                             }
-                            jobId = prepared.third
-                            uriText = prepared.second.toString()
-                            onUriChanged(uriText)
-                            ContextCompat.startForegroundService(
-                                context,
-                                MediaProcessingService.demucsIntent(context, prepared.second, prepared.third),
-                            )
-                            resultMessage = SEPARATION_STARTED_MESSAGE
-                        } catch (error: Exception) {
-                            jobId?.let(projectLinks::remove)
-                            resultMessage = error.message ?: "Falha ao iniciar a separação."
-                        } finally {
-                            startingSeparation = false
+                            require(current.projectId == p.projectId) {
+                                "O projeto ativo mudou. Tente novamente."
+                            }
+                            val managedUri = requireNotNull(
+                                projectRepository.projectSourceUri(current.projectId)
+                            ) { "A fonte do projeto não está disponível." }
+                            val newJobId = UUID.randomUUID().toString()
+                            projectLinks.link(newJobId, current.projectId)
+                            Pair(managedUri, newJobId)
                         }
+                        jobId = prepared.second
+                        ContextCompat.startForegroundService(
+                            context,
+                            MediaProcessingService.demucsIntent(context, prepared.first, prepared.second),
+                        )
+                        resultMessage = SEPARATION_STARTED_MESSAGE
+                    } catch (error: Exception) {
+                        jobId?.let { withContext(Dispatchers.IO) { projectLinks.remove(it) } }
+                        resultMessage = error.message ?: "Falha ao iniciar a separação."
+                    } finally {
+                        startingSeparation = false
                     }
                 }
             },
-            enabled = uriText.isNotBlank() && !appJobBusy && !startingSeparation,
+            enabled = !appJobBusy && !startingSeparation,
         ) {
             Text(if (startingSeparation) "Preparando…" else "Separar")
         }
@@ -1241,7 +1310,11 @@ private fun SeparationScreen(
                 },
                 onExport = { exportPicker.launch(null) },
             )
-        }
+        } ?: Text(
+            "Nenhum stem gerado para este projeto ainda.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         resultMessage?.let {
             Text(it, color = MaterialTheme.colorScheme.primary)

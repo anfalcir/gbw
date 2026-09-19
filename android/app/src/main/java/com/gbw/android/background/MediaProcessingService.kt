@@ -23,6 +23,8 @@ import com.gbw.android.domain.AudioKind
 import com.gbw.android.domain.OutputFormat
 import com.gbw.android.domain.SourceProvider
 import com.gbw.android.export.ProjectExportRenderer
+import com.gbw.android.project.ProjectJobLinkStore
+import com.gbw.android.project.ProjectRepository
 import com.gbw.android.separation.DemucsNative
 import com.gbw.android.separation.DemucsSeparator
 import com.gbw.android.separation.DemucsRuntimeMonitor
@@ -49,12 +51,16 @@ class MediaProcessingService : Service() {
     private lateinit var store: JobStore
     private lateinit var separationResults: SeparationResultStore
     private lateinit var preparedSources: PreparedSourceStore
+    private lateinit var projectLinks: ProjectJobLinkStore
+    private lateinit var projects: ProjectRepository
 
     override fun onCreate() {
         super.onCreate()
         store = JobStore(this)
         separationResults = SeparationResultStore(this)
         preparedSources = PreparedSourceStore(this)
+        projectLinks = ProjectJobLinkStore(this)
+        projects = ProjectRepository(this)
         ensureChannel()
     }
 
@@ -274,6 +280,17 @@ class MediaProcessingService : Service() {
                     updateJob(persisted, progress, message)
                 }
                 preparedSources.save(result)
+                projectLinks.projectId(persisted.id)?.let { projectId ->
+                    val record = requireNotNull(preparedSources.load()) {
+                        "Fonte preparada não pôde ser recarregada para publicação no projeto."
+                    }
+                    projects.adoptPreparedSource(
+                        projectId = projectId,
+                        record = record,
+                        name = result.title,
+                        activate = false,
+                    )
+                }
                 finishSuccess(
                     persisted,
                     "Fonte pronta • WAV float32 estéreo/44,1 kHz • " +
@@ -322,6 +339,15 @@ class MediaProcessingService : Service() {
                     jobId = persisted.id,
                 ) { progress, message -> updateJob(persisted, progress, message) }
                 separationResults.saveDemucs(persisted.id, result)
+                projectLinks.projectId(persisted.id)?.let { projectId ->
+                    val record = requireNotNull(separationResults.load()) {
+                        "Resultado Demucs não pôde ser recarregado para publicação no projeto."
+                    }
+                    val validated = requireNotNull(
+                        SeparationResultFiles.validate(filesDir, record)
+                    ) { "Resultado Demucs inválido antes da publicação no projeto." }
+                    projects.publishSeparation(projectId, validated)
+                }
                 val elapsedSeconds = result.elapsedMillis / 1_000L
                 val peakMiB = result.peakObservedPssKb / 1_024L
                 val medianSeconds = result.medianChunkMillis / 1_000.0
