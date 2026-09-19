@@ -78,7 +78,7 @@ object AudioQualityRules {
                 title = "Formato com perdas",
                 detail = "O formato/codec selecionado já pode ter descartado informação de áudio.",
                 ideal = "Exporte novamente do DAW em WAV 32-bit float, mantendo a taxa da sessão.",
-                risk = "A mudança de pitch pode tornar artefatos de compressão mais perceptíveis.",
+                risk = "Processamento adicional pode tornar artefatos de compressão mais perceptíveis.",
             )
         }
         if (sampleRate != null && sampleRate < 44_100) {
@@ -102,7 +102,7 @@ object AudioQualityRules {
                 title = "Picos no limite digital",
                 detail = "O pico medido está em aproximadamente %.2f dBFS.".format(peakDbfs),
                 ideal = "Evite normalizar ou limitar a exportação apenas para deixá-la mais alta.",
-                risk = "Picos já limitados ou clipados não podem ser recuperados pelo pitch.",
+                risk = "Picos já limitados ou clipados não podem ser recuperados pelo processamento.",
             )
         } else if (peakDbfs != null && peakDbfs > -1.0) {
             notes += "Pico alto (%.2f dBFS), porém sem indicação suficiente para bloquear o processamento.".format(peakDbfs)

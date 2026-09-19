@@ -48,7 +48,7 @@ def apk_gate(apk: pathlib.Path) -> None:
             raise SystemExit("Demucs-only APK gate failed; dead components remain:\n" +
                              "\n".join(forbidden_names))
         native_names = [name for name in names if name.startswith("lib/arm64-v8a/")]
-        expected = {"lib/arm64-v8a/libgbw_demucs.so", "lib/arm64-v8a/libgbw_rubberband.so"}
+        expected = {"lib/arm64-v8a/libgbw_demucs.so"}
         missing = sorted(expected.difference(native_names))
         if missing:
             raise SystemExit("Demucs-only APK gate missing required native runtime: " + ", ".join(missing))

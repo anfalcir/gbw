@@ -56,7 +56,7 @@ class FloatWavReader(file: File) : Closeable {
     private fun parseHeader(raf: RandomAccessFile): FloatWavInfo {
         raf.seek(0L)
         val riff = raf.readAscii(4)
-        require(riff == "RIFF") { "Pitch temporário deve ser WAV RIFF" }
+        require(riff == "RIFF") { "Arquivo temporário deve ser WAV RIFF" }
         raf.readUInt32LE()
         require(raf.readAscii(4) == "WAVE") { "Arquivo temporário não é WAVE" }
 

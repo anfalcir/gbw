@@ -15,16 +15,16 @@ class BackupLayoutTest {
         val sha = "abcdef1234567890abcdef1234567890"
         assertTrue(BackupLayout.artifactRemotePath("source/original.m4a", sha).startsWith("Fonte/"))
         assertTrue(BackupLayout.artifactRemotePath("stems/guitar.wav", sha).startsWith("Separacao - Stems/"))
-        assertTrue(BackupLayout.artifactRemotePath("exports/e1/original/backing.flac", sha).startsWith("Exports/Original/"))
+        assertTrue(BackupLayout.artifactRemotePath("exports/e1/backing.flac", sha).startsWith("Exports/backing"))
         assertTrue(BackupLayout.artifactRemotePath("project.json", sha).startsWith("Projeto/Dados/"))
     }
 
     @Test fun exportPathDoesNotExposeOpaqueExportId() {
         val path = BackupLayout.artifactRemotePath(
-            "exports/e_123_abcdef/pitch_-3st/backing.flac",
+            "exports/e_123_abcdef/backing.flac",
             "abcdef1234567890",
         )
-        assertTrue(path.startsWith("Exports/Ajustado -3st/"))
+        assertTrue(path.startsWith("Exports/backing"))
         assertTrue("e_123_abcdef" !in path)
     }
 

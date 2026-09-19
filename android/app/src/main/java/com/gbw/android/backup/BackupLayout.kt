@@ -34,15 +34,7 @@ internal object BackupLayout {
             "stems" -> { prefix = STEMS_DIR; rest = parts.drop(1) }
             "exports" -> {
                 prefix = EXPORTS_DIR
-                val payload = if (parts.size >= 3) parts.drop(2) else parts.drop(1)
-                rest = payload.map { segment ->
-                    when {
-                        segment == "original" -> "Original"
-                        segment.startsWith("pitch_") -> "Ajustado " + segment.removePrefix("pitch_")
-                        segment == "export_manifest.json" -> "export_manifest.json"
-                        else -> segment
-                    }
-                }
+                rest = if (parts.size >= 3) parts.drop(2) else parts.drop(1)
             }
             "project.json" -> { prefix = PROJECT_META_DIR; rest = listOf("Dados", "project.json") }
             else -> { prefix = PROJECT_META_DIR; rest = listOf("Dados") + parts }
