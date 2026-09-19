@@ -286,8 +286,8 @@ internal class SafBackupRemoteStore(
             .groupBy { it.projectId }
             .mapNotNull { (_, revisions) ->
                 revisions.maxWithOrNull(
-                    compareBy<RemoteRevision> { it.layoutVersion }
-                        .thenBy { it.updatedAtEpochMs }
+                    compareBy<RemoteRevision> { it.updatedAtEpochMs }
+                        .thenBy { it.layoutVersion }
                 )
             }
             .sortedByDescending { it.updatedAtEpochMs }

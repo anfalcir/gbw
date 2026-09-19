@@ -142,7 +142,14 @@ fun GbwApp() {
                     }
                 }
                 while (isActive) {
-                    activeProject = withContext(Dispatchers.IO) { projectRepository.active() }
+                    val latestProject = withContext(Dispatchers.IO) { projectRepository.active() }
+                    if (
+                        latestProject != null &&
+                        activeProject?.projectId != latestProject.projectId
+                    ) {
+                        shellMessage = null
+                    }
+                    activeProject = latestProject
                     val currentJob = withContext(Dispatchers.IO) { shellJobStore.loadReconciled() }
                     mediaJobBusy = currentJob?.state == "RUNNING" || currentJob?.state == "CANCELLING"
                     delay(750)

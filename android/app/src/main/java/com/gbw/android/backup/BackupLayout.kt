@@ -49,7 +49,7 @@ internal object BackupLayout {
         }
         val safeRest = rest.map(::safeSegment).toMutableList()
         require(safeRest.isNotEmpty())
-        val last = safeRest.removeLast()
+        val last = safeRest.removeAt(safeRest.lastIndex)
         safeRest += withHashSuffix(last, sha256)
         return (listOf(prefix) + safeRest).joinToString("/")
     }
