@@ -16,7 +16,10 @@ ui = read("app/src/main/java/com/gbw/android/ui/GbwApp.kt")
 
 assert "ServiceCompat.startForeground" not in service
 assert "androidx.core.app.ServiceCompat" not in service
-assert "sdkInt >= Build.VERSION_CODES.Q" in service
+assert "Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q" in service
+assert "@RequiresApi(Build.VERSION_CODES.Q)" in service
+assert "startTypedForeground(notification)" in service
+assert "declaredForegroundServiceTypeApi29()" in service
 assert "startForeground(" in service
 assert "declaredForegroundServiceType()" in service
 assert "ContextCompat.startForegroundService(" in ui
