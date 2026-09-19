@@ -85,9 +85,18 @@ class MediaProcessingService : Service() {
     private fun handleStartFailure(action: String?, error: Exception) {
         Log.e(TAG, "Falha ao iniciar Foreground Service para action=$action", error)
         val message = ForegroundServiceTypePolicy.userFacingFailure(error)
+        val sdkInt = Build.VERSION.SDK_INT
+        val requestedType = ForegroundServiceTypePolicy.typeForSdk(sdkInt)
+        val declaredType = declaredForegroundServiceType()
+        val diagnostic = ForegroundServiceTypePolicy.diagnostic(
+            error = error,
+            sdkInt = sdkInt,
+            requestedType = requestedType,
+            declaredType = declaredType,
+        )
         val current = store.load()
         if (current != null && (current.state == "RUNNING" || current.state == "CANCELLING")) {
-            store.save(current.copy(state = "ERROR", message = message))
+            store.save(current.copy(state = "ERROR", message = message, diagnostic = diagnostic))
         } else {
             store.save(
                 PersistedJob(
@@ -98,6 +107,7 @@ class MediaProcessingService : Service() {
                     progress = 0,
                     startedAt = System.currentTimeMillis(),
                     message = message,
+                    diagnostic = diagnostic,
                 )
             )
         }
@@ -354,19 +364,50 @@ class MediaProcessingService : Service() {
     }
 
     private fun startAsForeground(notification: Notification) {
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            notification,
-            ForegroundServiceTypePolicy.typeForSdk(Build.VERSION.SDK_INT),
-        )
+        val sdkInt = Build.VERSION.SDK_INT
+        if (sdkInt >= Build.VERSION_CODES.Q) {
+            // Android 15+ added mediaProcessing after the current ServiceCompat
+            // type allow-list. Calling the platform API avoids compatibility-layer
+            // masking while preserving the exact manifest-declared type.
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ForegroundServiceTypePolicy.typeForSdk(sdkInt),
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
+
+    @Suppress("DEPRECATION")
+    private fun declaredForegroundServiceType(): Int =
+        runCatching {
+            val component = ComponentName(this, MediaProcessingService::class.java)
+            if (Build.VERSION.SDK_INT >= 33) {
+                packageManager.getServiceInfo(
+                    component,
+                    PackageManager.ComponentInfoFlags.of(0),
+                ).foregroundServiceType
+            } else {
+                packageManager.getServiceInfo(component, 0).foregroundServiceType
+            }
+        }.getOrDefault(-1)
 
     override fun onTimeout(startId: Int, fgsType: Int) {
         val current = store.load()
         if (current != null && SeparationResultFiles.isDemucsType(current.type)) DemucsNative.cancel()
         if (current != null) {
-            store.save(current.copy(state = "INTERRUPTED", message = "Limite de processamento em segundo plano atingido."))
+            store.save(
+                current.copy(
+                    state = "INTERRUPTED",
+                    message = "Limite de processamento em segundo plano atingido.",
+                    diagnostic = ForegroundServiceTypePolicy.timeoutDiagnostic(
+                        sdkInt = Build.VERSION.SDK_INT,
+                        callbackType = fgsType,
+                        declaredType = declaredForegroundServiceType(),
+                    ),
+                )
+            )
         }
         activeJob?.cancel(CancellationException("Foreground service timeout"))
         releaseWakeLock()
