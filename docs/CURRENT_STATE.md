@@ -1,55 +1,111 @@
 # GBW — Estado Atual
 
-Data: 2026-09-18
-Branch: `dev/android-6.0`
-Baseline Linux: GBW Linux 5.23.0, somente leitura.
+**Data:** 2026-09-18  
+**Branch ativa:** `dev/android-6.0`  
+**Baseline Linux:** GBW Linux 5.23.0, congelado e somente leitura  
+**Roadmap autoritativo:** `docs/ANDROID_MIGRATION_PLAN.md`
 
-## Candidato em preparação
+## Checkpoint homologado
 
-- versão: `6.0.0-alpha12`
-- versionCode: `17`
-- objetivo: hardening pós-homologação alpha11 + paridade de sessão/backup/UX.
+- versão: `6.0.0-alpha12`;
+- versionCode: `17`;
+- commit: `9631fd165c457adeb103912633e2cc59d3adb32e`;
+- Android CI #108: **SUCCESS**;
+- APK SHA-256: `cded2ef6bb8ea02c329434c5d58550c9c4cfd9b3b18c8b42cb4bf5f1dff76ae7`.
 
-## Evidência física que motivou alpha12
+## Homologação física alpha12
 
-O vídeo `132666.mp4` mostrou:
-- ANR ao definir a pasta de backup;
-- destino exibido como URI/código;
-- Drive organizado por `projects/<UUID>/files` e hashes planos;
-- ausência de ação clara para fechar o projeto;
-- mensagens de processamento permanecendo depois do término.
+Backup Android/Google Drive aprovado no cenário principal:
+- backup automático executou sozinho;
+- estrutura foi criada automaticamente;
+- projeto foi organizado por banda/música;
+- categorias ficaram separadas e legíveis;
+- sincronização funcionou corretamente.
 
-## Correções do alpha12
+Vídeo `132674.mp4` revelou pequenos problemas de sessão/UX:
+- banda/música duplicada no card;
+- mensagem “Projeto fechado” permanece após reabrir;
+- stems permanecem visíveis sem projeto aberto;
+- parte do diagnóstico ainda está técnica demais.
 
-- operações pesadas SAF/Drive saem da UI thread;
-- destino passa a usar display name/provider;
-- reconcile inicial é WorkManager;
-- backup layout v2 legível por artista/música e por categoria;
-- migração segura do layout alpha11;
-- projeto automático `Artista - Música`, com normalização de iniciais;
-- migração de metadata já persistida quando possível;
-- lista de projetos por artista/música;
-- ação Fechar projeto e retorno ao estado inicial;
-- restore remoto não abre projeto silenciosamente;
-- job cards desaparecem quando a operação termina;
-- mensagens de início são substituídas por sucesso/erro/cancelamento;
-- inventário contém somente artefatos referenciados pelo estado atual;
-- cancelamento cooperativo de upload/restore.
+Esses pontos formam o próximo gate **R1 / alpha13**.
 
-## Invariantes preservados
+## Decisões de produto de 2026-09-18
 
-- Demucs-only `htdemucs_6s`;
-- OpenBLAS default 1 thread, política 1/2;
-- FFmpeg;
+### Android-first backup
+
+Não é mais requisito:
+- backup Linux → Android;
+- backup Android → Linux;
+- projeto cross-platform;
+- round-trip de manifests entre plataformas.
+
+O backup SAF/Google Drive v2 Android é o sistema oficial do produto móvel.
+
+### Original-only
+
+O GBW Android passa a trabalhar sempre no tom original da fonte.
+
+Devem ser removidos:
+- Afinação & Pitch;
+- detecção de afinação;
+- pitch por tuning/semitons;
+- Pitch de Arquivo;
 - Rubber Band R3;
-- backing = drums+bass+other+vocals+piano;
-- guitar separada;
-- shared gain sobre backing+guitar recombinados;
-- UUID interno imutável;
-- SHA-256;
-- commit remoto antes de cleanup;
-- `linux/` não é alterado.
+- export pitched/ajustado;
+- formant preservation ligada a pitch.
 
-## Gate
+A pedaleira externa é responsável por qualquer pitch necessário durante o uso musical.
 
-O source candidate alpha12 só deve ser entregue para homologação após Unit Tests, Lint, assemble, assinatura e gates nativos da Android CI.
+### Separação
+
+Permanece exclusivamente:
+- Demucs `htdemucs_6s`;
+- seis stems;
+- OpenBLAS default 1 thread, política interna 1/2.
+
+BS-RoFormer/Alta Qualidade/Comparar permanecem fora do produto.
+
+## Workflow final alvo
+
+1. Fonte
+2. Separação
+3. Exportação
+
+Gerenciamento:
+- Projetos
+- Logs
+
+Aplicativo:
+- Configurações
+- Sistema
+
+## Próximo gate
+
+**R1 — Alpha13: Session & Workflow UX Hardening**
+
+Prioridades:
+1. state scoping estrito por `projectId`;
+2. fechar projeto elimina source/stems/export visuais;
+3. corrigir card Projetos;
+4. eliminar mensagem stale;
+5. completar pesquisa/agrupamento de Projetos;
+6. preparar o fluxo para a remoção total de pitch em R2.
+
+Depois:
+- R2 original-only simplification;
+- R3 Logs/UX final;
+- R4 hardening;
+- R5 RC;
+- R6 homologação física final;
+- R7 6.0.0.
+
+## Invariantes atuais
+
+- `linux/` permanece intacto;
+- UUID de projeto é imutável;
+- backup remoto não abre projeto;
+- source/stems/export devem pertencer ao projeto ativo;
+- backup mantém somente o estado atual;
+- shared gain continua obrigatório no export original;
+- tarefas pesadas não pertencem à Activity.

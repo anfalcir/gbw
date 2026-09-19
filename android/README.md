@@ -1,72 +1,68 @@
 # GBW Android 6.x
 
-Aplicativo Android nativo do Guitar Backing Wizard. O baseline GBW Linux 5.23.0 permanece congelado em `linux/`.
+Aplicativo Android nativo do Guitar Backing Wizard.
 
-## Checkpoint
+O produto final 6.0 é **Android-first** e **original-only**.
 
-`6.0.0-alpha10` / versionCode 13
+## Workflow alvo
 
-- commit: `d93d45c11dae72065ba450b83927d5d8bc39ed26`
-- CI #92: SUCCESS
-- APK SHA-256: `1e6a692c3eb1b73501219809d371acb3747451dd6bb1a40a53e784eba1574ea4`
+1. Fonte
+2. Separação Demucs
+3. Exportação original
+
+Gerenciamento:
+- Projetos
+- Logs
+
+Backup:
+- SAF / Google Drive;
+- automático e manual;
+- restore Android;
+- organização por `Artista - Música`.
 
 ## Separação
 
-Android usa exclusivamente Demucs `htdemucs_6s`.
+Somente Demucs `htdemucs_6s`.
 
 Contrato:
-- float32 estéreo / 44,1 kHz;
-- window 343.980;
-- core 242.550;
-- contexto 50.715 por lado;
+- seis stems: drums, bass, other, vocals, guitar, piano;
+- float32 estéreo / 44,1 kHz no runtime do modelo;
 - um chunk por vez;
-- seis stems.
-
-Runtime:
-- demucs.cpp `f1206e9adeea103aef4a636b9e62297cf1f8e34e`;
-- Eigen `dd8c71e62852b2fe429edb6682ac91fd1c578a26`;
-- OpenBLAS 0.3.34 `e0166008be8e466242aa76b2ff75ce3f0fbf574a`;
-- BLAS default 1 thread;
+- OpenBLAS default 1 thread;
 - política interna 1/2;
 - arm64-v8a.
 
-## Benchmark físico
+Benchmark físico já confirmou 1 thread como configuração preferida no Samsung Galaxy Tab A11+.
 
-1 thread venceu no Samsung Galaxy Tab A11+:
-- 1895 s;
-- 1712 MiB PSS;
-- 39 chunks;
-- mediana 48,2 s;
-- máximo 51,0 s;
-- térmico normal.
+## Export
 
-2 threads: 1977 s / 1714 MiB.  
-4 threads: 2460 s / 1698 MiB — rejeitado.
+Produto final:
+- backing = drums + bass + other + vocals + piano;
+- guitar separada;
+- shared gain comum;
+- tom original da fonte.
 
-## Fonte
+Não haverá export pitched no produto final.
 
-- arquivo local via SAF;
-- inspeção/qualidade;
-- Pesquisa Online;
-- Bandcamp discovery;
-- ranking portado do Linux 5.23;
-- profundidade Robusta/Máxima;
-- URL manual;
-- providers isolados de falha.
+## Decisões removidas do escopo
 
-A aquisição automática de mídia não está acoplada à descoberta.
+O código alpha12 ainda contém partes históricas que serão removidas no gate R2:
+- Afinação & Pitch;
+- Pitch de Arquivo;
+- Rubber Band R3;
+- export ajustado/pitched.
 
-## Pitch
+Não existe requisito de projeto/backup cross-platform com Linux.
 
-Rubber Band R3 4.0.0 via NDK/JNI.
+## Checkpoint
 
-## Background
+`6.0.0-alpha12` / versionCode 17
 
-Foreground Service `:media`, persistência, cancelamento, cleanup e recuperação controlada.
+- commit: `9631fd165c457adeb103912633e2cc59d3adb32e`;
+- CI #108: SUCCESS;
+- APK SHA-256: `cded2ef6bb8ea02c329434c5d58550c9c4cfd9b3b18c8b42cb4bf5f1dff76ae7`.
 
-## Assinatura de homologação
+## Roadmap
 
-SHA-256:
-`6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`
-
-Não usar esta chave em produção.
+A fonte de verdade é:
+`docs/ANDROID_MIGRATION_PLAN.md`.

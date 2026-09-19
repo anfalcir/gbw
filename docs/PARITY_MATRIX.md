@@ -1,26 +1,43 @@
-# Matriz de Paridade — Linux 5.23 ↔ Android 6.x
+# Matriz de Contrato — Linux 5.23 ↔ Android 6.0
 
-| Contrato | Linux 5.23 | Android | Estado |
+**Source of truth de escopo:** `docs/ANDROID_MIGRATION_PLAN.md`
+
+A matriz abaixo não exige paridade total. Ela registra quais comportamentos do Linux continuam sendo
+referência e quais foram deliberadamente removidos do produto Android.
+
+| Área | Linux 5.23 | Android 6.0 alvo | Estado / decisão |
 |---|---|---|---|
-| Afinações suportadas | referência | 18 | ✅ domínio |
-| Delta de semitons | referência | equivalente | ✅ domínio |
-| Conversões inválidas | bloqueadas | bloqueadas | ✅ domínio |
-| Normalização de nomes | referência | equivalente | ✅ domínio |
-| Busca case/accent insensitive | sim | contrato portado | 🟡 UI/projetos |
-| Separação | baseline Linux | Demucs `htdemucs_6s` | ✅ decisão + runtime + áudio real |
-| Seis stems | referência | drums/bass/other/vocals/guitar/piano | ✅ |
-| Separação 44,1 kHz | referência | float32 estéreo 44,1 kHz | ✅ |
-| Continuidade entre chunks | referência | window/core/contexto fixos | ✅ áudio real alpha9.1 |
-| Métricas de separação | n/a | elapsed/PSS/chunks/thermal | ✅ |
-| Background | desktop n/a | Foreground Service `:media` | ✅ digital + uso físico |
-| Cancelamento | referência | UI/notificação + cleanup | ✅ implementação; 🟡 regressão final |
-| Pitch | Rubber Band R3 | Rubber Band R3 NDK/JNI | ✅ digital; 🟡 auditivo final |
-| Preservar duração | sim | validação + golden | ✅ digital |
-| Preservar canais | sim | validado | ✅ digital |
-| Exportação parcial segura | sim | temporário → valida → SAF | ✅ implementação |
-| Shared gain | referência | mesma regra | ⏳ |
-| Projetos | manifest | schema versionado | ⏳ |
-| Backup/restore | referência | interoperável no escopo comum | ⏳ |
-| Release signing | n/a | chave privada de produção | ⏳ |
+| Normalização de nomes | referência | `Artista - Música` | ✅ manter |
+| Busca case/accent insensitive | sim | sim | 🟡 completar UI Projetos |
+| Pesquisa/ranking de fonte | referência | portado | ✅ |
+| Fonte local/URL | sim | sim | ✅ |
+| Separação | múltiplos caminhos históricos | somente Demucs `htdemucs_6s` | ✅ divergência intencional |
+| Seis stems | sim | drums/bass/other/vocals/guitar/piano | ✅ |
+| Background | desktop n/a | Foreground Service `:media` | ✅ |
+| Cancelamento | referência | UI/notificação + cleanup | 🟡 regressão final |
+| Pitch | Rubber Band | **não existe no produto final** | 🚫 fora de escopo |
+| Detecção de afinação | sim | **não existe** | 🚫 fora de escopo |
+| Pitch de Arquivo | sim | **remover** | 🚫 fora de escopo |
+| Export original | sim | backing + guitar | ✅ |
+| Shared gain | referência | mesma regra | ✅ implementação; 🟡 regressão final |
+| Export pitched | sim | **não existe** | 🚫 fora de escopo |
+| Projetos | manifest desktop | UUID + project.json Android | ✅ arquitetura própria |
+| Fechar projeto | desmonta contexto | mesmo resultado | 🟡 corrigir vazamentos alpha12 |
+| Busca/agrupamento Projetos | sim | alvo equivalente | 🟡 R1/R3 |
+| Logs | histórico de sessão | alvo equivalente | ⏳ R3 |
+| Backup | ZIP/desktop | SAF/Google Drive v2 | ✅ Android-first |
+| Restore | desktop | Android ↔ Android | ✅ base; 🟡 stress final |
+| Backup Linux↔Android | n/a/formatos distintos | **não requerido** | 🚫 fora de escopo |
+| Release signing | n/a | chave privada de produção | ⏳ R5 |
+| Acessibilidade/lifecycle | desktop n/a | requisito Android | ⏳ R4 |
 
-Legenda: ✅ validado no nível indicado · 🟡 requer fechamento físico/integração · ⏳ pendente.
+Legenda:
+- ✅ implementado/decidido;
+- 🟡 implementado ou parcialmente pronto, ainda requer fechamento;
+- ⏳ pendente;
+- 🚫 deliberadamente fora de escopo.
+
+## Regra
+
+Diferenças marcadas como 🚫 **não podem ser reintroduzidas como pendências** sem nova decisão explícita
+do usuário.
