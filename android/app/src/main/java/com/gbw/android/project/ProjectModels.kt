@@ -31,10 +31,6 @@ data class SeparationState(
     val stems: Map<String, String>,
 )
 
-data class PitchState(
-    val semitones: Int = 0,
-    val vocalFormants: Boolean = true,
-)
 
 data class ExportArtifact(
     val role: String,
@@ -51,7 +47,6 @@ data class ExportArtifact(
 data class ExportState(
     val exportId: String,
     val revision: Long,
-    val pitchSemitones: Int,
     val outputFormat: String,
     val artifacts: List<ExportArtifact>,
     val manifestRelativePath: String,
@@ -68,7 +63,6 @@ data class ProjectManifest(
     val workflowStage: String = "SOURCE",
     val source: ManagedSource? = null,
     val separation: SeparationState? = null,
-    val pitch: PitchState = PitchState(),
     val export: ExportState? = null,
     val inventory: List<DurableArtifact> = emptyList(),
     val lastSyncedRevisionId: String? = null,
@@ -79,7 +73,7 @@ data class ProjectManifest(
     }
 
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 1
+        const val CURRENT_SCHEMA_VERSION = 2
 
         fun new(
             name: String,
@@ -159,7 +153,6 @@ fun nextProjectCopySong(song: String, existingSongs: Collection<String>): String
 fun projectWorkflowStageLabel(stage: String): String = when (stage.uppercase()) {
     "SOURCE" -> "Fonte"
     "SEPARATION" -> "Separação"
-    "TUNING" -> "Afinação (legado)"
     "EXPORT" -> "Exportação"
     else -> stage.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 }
@@ -187,7 +180,6 @@ fun ProjectManifest.canonicalRevisionState(): String = buildString {
     append("song=").append(song).append('\n')
     append("updatedAt=").append(updatedAtEpochMs).append('\n')
     append("stage=").append(workflowStage).append('\n')
-    append("pitch=").append(pitch.semitones).append(':').append(pitch.vocalFormants).append('\n')
     source?.let {
         append("source=").append(it.originalRelativePath).append('|')
             .append(it.preparedRelativePath.orEmpty()).append('|')
@@ -203,7 +195,7 @@ fun ProjectManifest.canonicalRevisionState(): String = buildString {
     }
     export?.let {
         append("export=").append(it.exportId).append('|').append(it.revision).append('|')
-            .append(it.pitchSemitones).append('|').append(it.outputFormat).append('|')
+            .append(it.outputFormat).append('|')
             .append(it.manifestRelativePath).append('\n')
         it.artifacts.sortedWith(compareBy<ExportArtifact> { a -> a.variant }.thenBy { a -> a.role }).forEach { a ->
             append("exportArtifact=").append(a.variant).append('|').append(a.role).append('|')

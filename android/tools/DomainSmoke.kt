@@ -1,10 +1,6 @@
 import com.gbw.android.domain.*
 
 fun main() {
-    check(Tunings.names.size == 18)
-    check(Tunings.delta("Drop B", "Drop D") == 3)
-    check(Tunings.delta("Drop D", "Drop B") == -3)
-    check(Tunings.delta("E Standard", "Drop D") == null)
     check(TextNormalization.titleCase("WOLVES AT THE GATE") == "Wolves At The Gate")
     check(TextNormalization.searchKey("Árvore") == "arvore")
 
@@ -31,15 +27,10 @@ fun main() {
     check(caution.issues.any { it.title == "Formato com perdas" })
 
     val doc = ProjectDocument(
-        config = WorkflowConfig(originalTuning = "Drop B", targetTuning = "Drop D"),
-        state = ProjectState(sourcePrepared = true, separationComplete = true, tuningConfirmed = true)
+        state = ProjectState(sourcePrepared = true, separationComplete = true)
     )
-    check(WorkflowRules.states(doc)[WorkflowStep.TUNING] == true)
+    check(WorkflowRules.states(doc)[WorkflowStep.SEPARATION] == true)
     check(WorkflowRules.activeStep(doc) == WorkflowStep.EXPORT)
-
-    check(FilePitchRules.suggestedName(
-        "guitarra.wav", "Drop D", "Drop B", -3, OutputFormat.WAV_FLOAT32
-    ) == "guitarra_DropD_para_DropB.wav")
 
     println("DOMAIN_SMOKE_OK")
 }

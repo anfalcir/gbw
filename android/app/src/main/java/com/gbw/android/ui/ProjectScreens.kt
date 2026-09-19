@@ -13,7 +13,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -48,9 +47,7 @@ import com.gbw.android.backup.ProjectBackupCoordinator
 import com.gbw.android.backup.SafBackupRemoteStore
 import com.gbw.android.background.JobStore
 import com.gbw.android.background.MediaProcessingService
-import com.gbw.android.domain.FilePitchRules
 import com.gbw.android.domain.OutputFormat
-import com.gbw.android.domain.Tunings
 import com.gbw.android.export.ProjectExportCopier
 import com.gbw.android.project.ProjectManifest
 import com.gbw.android.project.ProjectJobLinkStore
@@ -296,94 +293,6 @@ internal fun ProjectsScreen(
 }
 
 @Composable
-internal fun ProjectTuningScreen() {
-    val context = LocalContext.current
-    val repo = remember(context) { ProjectRepository(context) }
-    var project by remember { mutableStateOf(repo.active()) }
-    var byTuning by rememberSaveable { mutableStateOf(true) }
-    var sourceTuning by rememberSaveable { mutableStateOf("Drop D") }
-    var targetTuning by rememberSaveable { mutableStateOf("Drop B") }
-    var manualSemitones by rememberSaveable { mutableStateOf(project?.pitch?.semitones ?: 0) }
-    var vocalFormants by rememberSaveable { mutableStateOf(project?.pitch?.vocalFormants ?: true) }
-    var message by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            project = repo.active()
-            delay(1200)
-        }
-    }
-    val semitones = if (byTuning) {
-        FilePitchRules.semitonesFromTunings(sourceTuning, targetTuning)
-    } else {
-        manualSemitones
-    }
-
-    Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Text("Afinação & Pitch", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        val p = project
-        if (p == null) {
-            Text("Abra ou crie um projeto primeiro.")
-            return@Column
-        }
-        Text("Projeto: " + p.name)
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = byTuning, onCheckedChange = { byTuning = true })
-                    Text("Por afinação")
-                    Checkbox(checked = !byTuning, onCheckedChange = { byTuning = false })
-                    Text("Por semitons")
-                }
-                if (byTuning) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CompactDropdown("Atual", sourceTuning, Tunings.names) { sourceTuning = it }
-                        CompactDropdown("Destino", targetTuning, Tunings.names) { targetTuning = it }
-                    }
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(onClick = { if (manualSemitones > -12) manualSemitones-- }) { Text("−") }
-                        Text(manualSemitones.toString() + " st", style = MaterialTheme.typography.titleMedium)
-                        OutlinedButton(onClick = { if (manualSemitones < 12) manualSemitones++ }) { Text("+") }
-                    }
-                }
-                val resultText = semitones?.let { value ->
-                    (if (value >= 0) "+" else "") + value + " st"
-                } ?: "incompatível"
-                Text("Resultado: " + resultText)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Switch(checked = vocalFormants, onCheckedChange = { vocalFormants = it })
-                    Text("Preservar formantes nos vocais")
-                }
-                Text(
-                    "Bateria permanece sem pitch; guitar/bass/other/piano recebem pitch; vocals respeita formantes.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-        Button(
-            onClick = {
-                val value = semitones
-                if (value == null) {
-                    message = "Conversão de afinação inválida."
-                } else {
-                    runCatching {
-                        project = repo.updatePitch(p.projectId, value, vocalFormants)
-                        message = "Configuração salva."
-                    }.onFailure { message = it.message }
-                }
-            },
-            enabled = semitones != null && p.separation != null,
-        ) { Text("Salvar configuração") }
-        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-    }
-}
-
-@Composable
 internal fun ProjectExportScreen(
     onGoToSource: () -> Unit,
     onGoToSeparation: () -> Unit,
@@ -398,8 +307,6 @@ internal fun ProjectExportScreen(
     var jobProjectId by remember { mutableStateOf<String?>(null) }
     var observedProjectId by remember { mutableStateOf<String?>(null) }
     var formatName by rememberSaveable { mutableStateOf(OutputFormat.FLAC_24.name) }
-    var includeOriginal by rememberSaveable { mutableStateOf(true) }
-    var includePitched by rememberSaveable { mutableStateOf(true) }
     var copyBusy by remember { mutableStateOf(false) }
     var startingExport by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -491,30 +398,19 @@ internal fun ProjectExportScreen(
         }
 
         Text(
-            "Produto final: backing + guitar. O pico da recombinação define um único ganho compartilhado.",
+            "Backing + guitar no tom original. O pico é avaliado em conjunto e, quando necessário, " +
+                "um único ganho compartilhado preserva a relação entre os dois arquivos.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(p.name, fontWeight = FontWeight.SemiBold)
-                Text("Pitch: " + (if (p.pitch.semitones >= 0) "+" else "") + p.pitch.semitones + " st")
                 CompactDropdown(
                     "Formato",
                     OutputFormat.valueOf(formatName).label,
                     OutputFormat.entries.map { it.label },
                 ) { label -> formatName = OutputFormat.entries.first { it.label == label }.name }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = includeOriginal, onCheckedChange = { includeOriginal = it })
-                    Text("Par ORIGINAL")
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = includePitched, onCheckedChange = { includePitched = it })
-                    Text("Par AJUSTADO/PITCH")
-                }
-                if (p.pitch.semitones == 0 && includeOriginal && includePitched) {
-                    Text("Pitch 0: nenhuma cópia ajustada redundante será criada.", style = MaterialTheme.typography.bodySmall)
-                }
             }
         }
 
@@ -535,8 +431,6 @@ internal fun ProjectExportScreen(
                             MediaProcessingService.projectExportIntent(
                                 context,
                                 p.projectId,
-                                includeOriginal,
-                                includePitched,
                                 OutputFormat.valueOf(formatName),
                                 jobId,
                             ),
@@ -550,7 +444,7 @@ internal fun ProjectExportScreen(
                     }
                 }
             },
-            enabled = !busy && !startingExport && (includeOriginal || includePitched),
+            enabled = !busy && !startingExport,
         ) { Text(if (busy || startingExport) "Exportando…" else "Gerar backing + guitar") }
 
         exportJob?.takeIf { it.state == "RUNNING" || it.state == "CANCELLING" }?.let { current ->
@@ -574,8 +468,8 @@ internal fun ProjectExportScreen(
             OutlinedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Último export", fontWeight = FontWeight.SemiBold)
-                    export.artifacts.forEach { a ->
-                        Text(a.variant + " • " + a.role + " • " + a.format)
+                    export.artifacts.forEach { artifact ->
+                        Text(artifact.role + " • " + artifact.format)
                     }
                     Button(onClick = { copyPicker.launch(null) }, enabled = !copyBusy) {
                         Text(if (copyBusy) "Copiando…" else "Copiar export para pasta…")

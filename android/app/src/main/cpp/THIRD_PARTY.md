@@ -1,12 +1,5 @@
 # Android Native Third-Party Components
 
-## Rubber Band Library
-
-- versão: 4.0.0
-- commit: `1d95888bec3ae0a17c0c4af791810d5a63f6bc35`
-- uso: Pitch de Arquivo
-- gate de distribuição: revisar GPL v2-or-later ou licença comercial antes do RC
-
 ## demucs.cpp
 
 - commit: `f1206e9adeea103aef4a636b9e62297cf1f8e34e`

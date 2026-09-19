@@ -32,8 +32,8 @@ internal object ProjectExportCopier {
             all.forEachIndexed { index, artifact ->
                 val source = repo.resolveProjectPath(projectId, artifact.relativePath)
                 val display = when (artifact.role) {
-                    "backing" -> artifact.variant + "_backing." + source.extension
-                    "guitar" -> artifact.variant + "_guitar." + source.extension
+                    "backing" -> "backing." + source.extension
+                    "guitar" -> "guitar." + source.extension
                     else -> "export_manifest.json"
                 }
                 val mime = when (source.extension.lowercase()) {

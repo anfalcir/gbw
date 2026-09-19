@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -37,7 +36,6 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -71,15 +69,11 @@ import com.gbw.android.background.WorkerExitDiagnostics
 import com.gbw.android.backup.BackupScheduler
 import com.gbw.android.backup.BackupSettingsStore
 import com.gbw.android.domain.AudioInspection
-import com.gbw.android.domain.AudioKind
-import com.gbw.android.domain.FilePitchRules
-import com.gbw.android.domain.OutputFormat
 import com.gbw.android.domain.QualityStatus
 import com.gbw.android.domain.RankedSourceCandidate
 import com.gbw.android.domain.SourceSearchDepth
 import com.gbw.android.domain.SourceSearchRequest
 import com.gbw.android.domain.SourceSearchLinks
-import com.gbw.android.domain.Tunings
 import com.gbw.android.separation.DemucsRuntimeMonitor
 import com.gbw.android.separation.DemucsThreadPolicy
 import com.gbw.android.separation.SeparationResultFiles
@@ -107,11 +101,9 @@ private const val SEPARATION_STARTED_MESSAGE = "Separação iniciada em segundo 
 private enum class AppPage(val title: String, val group: String) {
     SOURCE("1. Fonte", "PROCESSO"),
     SEPARATION("2. Separação", "PROCESSO"),
-    TUNING("3. Afinação & Pitch", "PROCESSO"),
-    EXPORT("4. Exportação", "PROCESSO"),
+    EXPORT("3. Exportação", "PROCESSO"),
     PROJECTS("Projetos", "GERENCIAMENTO"),
     LOGS("Logs", "GERENCIAMENTO"),
-    FILE_PITCH("Pitch de Arquivo", "FERRAMENTAS"),
     SETTINGS("Configurações", "APLICATIVO"),
     SYSTEM("Sistema", "APLICATIVO"),
 }
@@ -345,7 +337,6 @@ private fun PageContent(
                     projectSession = projectSession,
                     onGoToSource = { onNavigate(AppPage.SOURCE) },
                 )
-                AppPage.TUNING -> ProjectTuningScreen()
                 AppPage.EXPORT -> ProjectExportScreen(
                     onGoToSource = { onNavigate(AppPage.SOURCE) },
                     onGoToSeparation = { onNavigate(AppPage.SEPARATION) },
@@ -359,7 +350,6 @@ private fun PageContent(
                     onCreate = { onNavigate(AppPage.SOURCE) },
                 )
                 AppPage.LOGS -> PlaceholderScreen("Logs", "Logs de jobs e processamento serão persistidos por operação.")
-                AppPage.FILE_PITCH -> FilePitchScreen()
                 AppPage.SETTINGS -> BackupSettingsScreen()
                 AppPage.SYSTEM -> SystemScreen()
             }
@@ -1404,280 +1394,6 @@ private fun formatStemBytes(bytes: Long): String =
         "%.1f KiB".format(bytes.toDouble() / 1024.0)
     }
 
-@Composable
-private fun FilePitchScreen() {
-    val context = LocalContext.current
-    val jobStore = remember(context) { JobStore(context) }
-    var uriText by rememberSaveable { mutableStateOf("") }
-    var inspection by remember { mutableStateOf<AudioInspection?>(null) }
-    var inspectionError by remember { mutableStateOf<String?>(null) }
-    var inspecting by remember { mutableStateOf(false) }
-    var guidanceOpen by rememberSaveable { mutableStateOf(false) }
-    var byTuning by rememberSaveable { mutableStateOf(true) }
-    var sourceTuning by rememberSaveable { mutableStateOf("Drop D") }
-    var targetTuning by rememberSaveable { mutableStateOf("Drop B") }
-    var manualSemitones by rememberSaveable { mutableStateOf(-3) }
-    var audioKind by rememberSaveable { mutableStateOf(AudioKind.INSTRUMENT_OR_MIX.name) }
-    var outputFormat by rememberSaveable { mutableStateOf(OutputFormat.WAV_FLOAT32.name) }
-    var showCaution by remember { mutableStateOf(false) }
-    var cautionAcceptedForRun by rememberSaveable { mutableStateOf(false) }
-    var resultMessage by remember { mutableStateOf<String?>(null) }
-    var jobState by remember { mutableStateOf(jobStore.loadReconciled()) }
-    var handledPitchTerminalJobId by rememberSaveable { mutableStateOf("") }
-
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } catch (_: Exception) {
-            }
-            cautionAcceptedForRun = false
-            uriText = uri.toString()
-        }
-    }
-
-    val outputPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/*")) { uri ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            } catch (_: Exception) {
-            }
-            val inputUri = uriText.takeIf { it.isNotBlank() }?.let(Uri::parse)
-            val currentSemitones = if (byTuning) FilePitchRules.semitonesFromTunings(sourceTuning, targetTuning) else manualSemitones
-            if (inputUri == null || currentSemitones == null || !FilePitchRules.validateSemitones(currentSemitones)) {
-                resultMessage = "Não foi possível iniciar: conversão/arquivo inválido."
-                return@rememberLauncherForActivityResult
-            }
-            val intent = MediaProcessingService.filePitchIntent(
-                context = context,
-                inputUri = inputUri,
-                outputUri = uri,
-                semitones = currentSemitones,
-                audioKind = AudioKind.valueOf(audioKind),
-                outputFormat = OutputFormat.valueOf(outputFormat),
-                cautionAccepted = cautionAcceptedForRun,
-            )
-            ContextCompat.startForegroundService(context, intent)
-            resultMessage = "Processamento iniciado em segundo plano. Você pode sair desta tela."
-        }
-    }
-
-    LaunchedEffect(uriText) {
-        inspection = null
-        inspectionError = null
-        resultMessage = null
-        if (uriText.isBlank()) return@LaunchedEffect
-        inspecting = true
-        try {
-            inspection = AudioInspectionDispatcher.inspect(context, Uri.parse(uriText))
-        } catch (e: Exception) {
-            inspectionError = e.message ?: "Falha ao analisar o arquivo."
-        } finally {
-            inspecting = false
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            val freshJob = jobStore.loadReconciled()
-            jobState = freshJob
-            if (
-                freshJob?.type == "file-pitch" &&
-                freshJob.state !in setOf("RUNNING", "CANCELLING") &&
-                freshJob.id != handledPitchTerminalJobId
-            ) {
-                handledPitchTerminalJobId = freshJob.id
-                resultMessage = when (freshJob.state) {
-                    "SUCCESS" -> "Pitch concluído com sucesso."
-                    "CANCELLED" -> "Processamento cancelado."
-                    else -> freshJob.message
-                }
-            }
-            delay(500)
-        }
-    }
-
-    val semitones = if (byTuning) FilePitchRules.semitonesFromTunings(sourceTuning, targetTuning) else manualSemitones
-    val selectedFormat = OutputFormat.valueOf(outputFormat)
-    val selectedInspection = inspection
-    val suggestedOutputName = if (selectedInspection != null && semitones != null) {
-        FilePitchRules.suggestedName(
-            selectedInspection.displayName,
-            if (byTuning) sourceTuning else null,
-            if (byTuning) targetTuning else null,
-            semitones,
-            selectedFormat,
-        )
-    } else {
-        "gbw_pitch.${selectedFormat.extension}"
-    }
-    val pitchJob = jobState?.takeIf { it.type == "file-pitch" }
-    val jobRunning = pitchJob?.state == "RUNNING"
-    val chooseOutput: (Boolean) -> Unit = { accepted ->
-        cautionAcceptedForRun = accepted
-        outputPicker.launch(suggestedOutputName)
-    }
-
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Pitch de Arquivo", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Ferramenta independente: funciona mesmo sem projeto aberto.")
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Arquivo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Button(onClick = { picker.launch(arrayOf("audio/*")) }, enabled = !jobRunning) { Text("Selecionar arquivo…") }
-                if (inspecting) Text("Analisando formato e qualidade…")
-                inspectionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                inspection?.let { QualityCard(it) }
-            }
-        }
-
-        OutlinedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                TextButton(onClick = { guidanceOpen = !guidanceOpen }) {
-                    Text(if (guidanceOpen) "▾ Como exportar do seu DAW para o GBW?" else "▸ Como exportar do seu DAW para o GBW?")
-                }
-                if (guidanceOpen) {
-                    Text(
-                        "• Prefira WAV 32-bit float.\n" +
-                            "• Mantenha a mesma taxa de amostragem da sessão.\n" +
-                            "• Sessão em 44,1 kHz: mantenha 44,1 kHz. Sessão em 48 kHz: mantenha 48 kHz.\n" +
-                            "• Se estiver criando a sessão, 48 kHz é uma ótima escolha.\n" +
-                            "• Não faça upsampling apenas para usar o GBW.\n" +
-                            "• Mono para guitarra mono; preserve estéreo quando houver efeitos estéreo.\n" +
-                            "• Evite normalizar/limitar sem necessidade.\n" +
-                            "• Evite MP3/AAC quando puder exportar lossless.\n" +
-                            "• Para manter sincronismo, exporte desde o mesmo ponto inicial da backing/original."
-                    )
-                }
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Conversão", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = byTuning, onClick = { if (!jobRunning) byTuning = true }, enabled = !jobRunning)
-                    Text("Por afinação")
-                    Spacer(Modifier.width(20.dp))
-                    RadioButton(selected = !byTuning, onClick = { if (!jobRunning) byTuning = false }, enabled = !jobRunning)
-                    Text("Por semitons")
-                }
-                if (byTuning) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        SimpleDropdown("Atual", sourceTuning, Tunings.names, onSelect = { if (!jobRunning) sourceTuning = it }, modifier = Modifier.weight(1f))
-                        SimpleDropdown("Destino", targetTuning, Tunings.names, onSelect = { if (!jobRunning) targetTuning = it }, modifier = Modifier.weight(1f))
-                    }
-                    OutlinedButton(onClick = {
-                        val old = sourceTuning
-                        sourceTuning = targetTuning
-                        targetTuning = old
-                    }, enabled = !jobRunning) { Text("↕ Inverter") }
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(onClick = { if (manualSemitones > -12) manualSemitones-- }, enabled = !jobRunning) { Text("−") }
-                        Text("$manualSemitones semitons", style = MaterialTheme.typography.titleMedium)
-                        OutlinedButton(onClick = { if (manualSemitones < 12) manualSemitones++ }, enabled = !jobRunning) { Text("+") }
-                    }
-                }
-                Text("Resultado: ${semitones?.let { if (it >= 0) "+$it semitons" else "$it semitons" } ?: "conversão global incompatível"}")
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Tipo de áudio", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = audioKind == AudioKind.INSTRUMENT_OR_MIX.name,
-                        onClick = { if (!jobRunning) audioKind = AudioKind.INSTRUMENT_OR_MIX.name },
-                        enabled = !jobRunning,
-                    )
-                    Text("Instrumento / Mix")
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = audioKind == AudioKind.VOCAL.name,
-                        onClick = { if (!jobRunning) audioKind = AudioKind.VOCAL.name },
-                        enabled = !jobRunning,
-                    )
-                    Text("Vocal — preservar formantes")
-                }
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Saída", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                SimpleDropdown("Formato", selectedFormat.label, OutputFormat.entries.map { it.label }, onSelect = { label ->
-                    if (!jobRunning) outputFormat = OutputFormat.entries.first { it.label == label }.name
-                })
-                Text("Nome sugerido: $suggestedOutputName")
-                Text("O GBW renderiza e valida em armazenamento temporário antes de gravar no destino selecionado.", style = MaterialTheme.typography.bodySmall)
-            }
-        }
-
-        val canApply = inspection != null && semitones != null && FilePitchRules.validateSemitones(semitones) && !jobRunning
-        Button(onClick = {
-            val info = inspection ?: return@Button
-            if (info.status == QualityStatus.CAUTION) showCaution = true
-            else chooseOutput(false)
-        }, enabled = canApply) { Text("Aplicar pitch") }
-
-        pitchJob?.takeIf {
-            it.state == "RUNNING" || it.state == "CANCELLING"
-        }?.let { job ->
-            OutlinedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Processamento", fontWeight = FontWeight.SemiBold)
-                    Text("${job.state} • ${job.progress}%")
-                    Text(job.message)
-                    if (job.state == "RUNNING") {
-                        OutlinedButton(onClick = {
-                            context.startService(
-                                Intent(context, MediaProcessingService::class.java)
-                                    .setAction(MediaProcessingService.ACTION_CANCEL)
-                            )
-                        }) { Text("Cancelar processamento") }
-                    }
-                }
-            }
-        }
-        resultMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-    }
-
-    if (showCaution) {
-        val info = inspection
-        AlertDialog(
-            onDismissRequest = { showCaution = false },
-            title = { Text("Verifique a qualidade do arquivo") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("O arquivo pode ser processado, mas encontramos condições que podem afetar o resultado:")
-                    info?.issues?.forEach { issue ->
-                        Text(issue.title, fontWeight = FontWeight.Bold)
-                        Text(issue.detail)
-                        Text("Ideal: ${issue.ideal}")
-                        Text("Risco: ${issue.risk}")
-                    }
-                    Text("O GBW pode continuar usando este arquivo. A decisão permanece com você.")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showCaution = false
-                    picker.launch(arrayOf("audio/*"))
-                }) { Text("Escolher outro arquivo") }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    showCaution = false
-                    chooseOutput(true)
-                }) { Text("Continuar mesmo assim") }
-            }
-        )
-    }
-}
 
 @Composable
 private fun QualityCard(info: AudioInspection) {
@@ -1767,10 +1483,9 @@ private fun SystemScreen() {
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Motores", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Áudio e separação", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 StatusLine("Inspeção WAV", "Nativa")
                 StatusLine("FFmpeg", "Áudio / SAF")
-                StatusLine("Rubber Band R3", "v4.0.0 / NDK-JNI")
                 StatusLine("Demucs htdemucs_6s", "Implementado")
                 val blasThreads = DemucsThreadPolicy.resolve()
                 val threadWord = if (blasThreads == 1) "thread" else "threads"

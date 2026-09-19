@@ -1,9 +1,5 @@
 package com.gbw.android.audio
 
-import android.content.Context
-import android.net.Uri
-import android.os.StatFs
-import com.gbw.android.domain.AudioInspection
 import com.gbw.android.domain.OutputFormat
 import org.json.JSONObject
 import java.io.File
@@ -16,36 +12,7 @@ internal data class EncodedAudioProbe(
     val bitDepth: Int?,
 )
 
-internal object FfmpegPitchIo {
-    suspend fun prepareFloatWav(
-        context: Context,
-        inputUri: Uri,
-        inspection: AudioInspection,
-        output: File,
-    ) {
-        ensureWorkingSpace(context, inspection)
-        val workDir = requireNotNull(output.parentFile) { "Área temporária de pitch ausente." }
-        output.parentFile?.mkdirs()
-        val staged = SafAudioStager.stage(context, inputUri, workDir, "source-input")
-        try {
-            val canRemux =
-                inspection.format.equals("WAV", true) &&
-                    inspection.codec.equals("pcm_f32le", true) &&
-                    inspection.isFloat &&
-                    inspection.bitDepth == 32
-            val codecArgs = if (canRemux) "-c:a copy" else "-c:a pcm_f32le"
-            val command =
-                "-hide_banner -nostdin -y -v error -i ${quote(staged.file.absolutePath)} " +
-                    "-map 0:a:0 -vn $codecArgs -f wav ${quote(output.absolutePath)}"
-            LocalFfmpeg.execute(command, "Falha ao preparar o áudio em WAV float32.")
-            require(output.isFile && output.length() > 44L) {
-                "A preparação de áudio não gerou um WAV válido."
-            }
-        } finally {
-            staged.file.delete()
-        }
-    }
-
+internal object AudioExportIo {
     suspend fun encodeOutput(inputFloatWav: File, output: File, format: OutputFormat) {
         output.parentFile?.mkdirs()
         val codecArgs = when (format) {
@@ -67,11 +34,7 @@ internal object FfmpegPitchIo {
             "-v error -select_streams a:0 " +
                 "-show_entries stream=codec_name,sample_rate,channels,bits_per_sample,bits_per_raw_sample:" +
                 "format=duration -of json ${quote(file.absolutePath)}"
-        val output =
-            LocalFfmpeg.probe(
-                command,
-                "Falha ao validar o arquivo renderizado.",
-            )
+        val output = LocalFfmpeg.probe(command, "Falha ao validar o arquivo renderizado.")
         try {
             val json = JSONObject(output.ifBlank { "{}" })
             val stream =
@@ -99,25 +62,6 @@ internal object FfmpegPitchIo {
             )
         } catch (error: Exception) {
             throw IllegalStateException("Metadados inválidos no arquivo renderizado.", error)
-        }
-    }
-
-    private fun ensureWorkingSpace(context: Context, inspection: AudioInspection) {
-        val rate = inspection.sampleRate ?: return
-        val channels = inspection.channels ?: return
-        val required =
-            FilePitchStorageBudget.requiredBytes(
-                durationSeconds = inspection.durationSeconds,
-                sampleRate = rate,
-                channels = channels,
-                outputFormat = OutputFormat.WAV_24,
-            ) ?: return
-        val available = StatFs(context.cacheDir.absolutePath).availableBytes
-        require(available >= required) {
-            val requiredMiB = required / (1024L * 1024L)
-            val availableMiB = available / (1024L * 1024L)
-            "Espaço temporário insuficiente: são necessários cerca de ${requiredMiB} MiB; " +
-                "disponíveis ${availableMiB} MiB."
         }
     }
 

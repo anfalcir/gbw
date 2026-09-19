@@ -60,19 +60,35 @@ internal class ProjectRepository(context: Context) {
             val song = normalizeProjectText(project.song)
             val automatic = automaticProjectName(artist, song)
             val desiredName = automatic.ifBlank { project.name }
+            val legacySchema = project.schemaVersion < ProjectManifest.CURRENT_SCHEMA_VERSION
+            val knownStages = setOf("SOURCE", "SEPARATION", "EXPORT")
+            val desiredStage = when {
+                legacySchema && project.separation != null -> "SEPARATION"
+                legacySchema -> "SOURCE"
+                project.workflowStage !in knownStages && project.separation != null -> "SEPARATION"
+                project.workflowStage !in knownStages -> "SOURCE"
+                else -> project.workflowStage
+            }
             if (
                 artist != project.artist ||
                 song != project.song ||
-                desiredName != project.name
+                desiredName != project.name ||
+                desiredStage != project.workflowStage ||
+                legacySchema
             ) {
-                mutate(project.projectId) {
+                val migrated = mutate(project.projectId) {
                     it.copy(
+                        schemaVersion = ProjectManifest.CURRENT_SCHEMA_VERSION,
                         artist = artist,
                         song = song,
                         name = sanitizeProjectName(desiredName),
+                        workflowStage = desiredStage,
+                        export = if (legacySchema) null else it.export,
+                        lastSyncedRevisionId = if (legacySchema) null else it.lastSyncedRevisionId,
                         updatedAtEpochMs = System.currentTimeMillis(),
                     )
                 }
+                cleanupUnreferenced(projectRoot(project.projectId), migrated.inventory)
                 changed += 1
             }
         }
@@ -137,16 +153,6 @@ internal class ProjectRepository(context: Context) {
             )
         }
 
-    fun updatePitch(projectId: String, semitones: Int, vocalFormants: Boolean): ProjectManifest {
-        require(semitones in -12..12)
-        return mutate(projectId) {
-            it.copy(
-                pitch = PitchState(semitones, vocalFormants),
-                workflowStage = if (it.separation != null) "TUNING" else it.workflowStage,
-                updatedAtEpochMs = System.currentTimeMillis(),
-            )
-        }
-    }
 
     fun duplicate(projectId: String, name: String? = null): ProjectManifest {
         val original = load(projectId)
@@ -169,7 +175,6 @@ internal class ProjectRepository(context: Context) {
                 workflowStage = original.workflowStage,
                 source = original.source,
                 separation = original.separation,
-                pitch = original.pitch,
                 export = original.export,
             )
             val refreshed = duplicatedState.copy(
