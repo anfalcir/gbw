@@ -1,3 +1,11 @@
+val releaseStorePath = System.getenv("GBW_RELEASE_KEYSTORE_PATH")
+val releaseStorePassword = System.getenv("GBW_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = System.getenv("GBW_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("GBW_RELEASE_KEY_PASSWORD")
+val releaseSigningAvailable =
+    listOf(releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
+        .all { !it.isNullOrBlank() }
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -12,8 +20,8 @@ android {
         applicationId = "com.gbw.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 21
-        versionName = "6.0.0-alpha16"
+        versionCode = 22
+        versionName = "6.0.0-rc1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -31,6 +39,15 @@ android {
             keyPassword = "gbw-homologation"
             storeType = "PKCS12"
         }
+        if (releaseSigningAvailable) {
+            create("production") {
+                storeFile = file(requireNotNull(releaseStorePath))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+                storeType = "PKCS12"
+            }
+        }
     }
 
     buildTypes {
@@ -38,6 +55,7 @@ android {
             signingConfig = signingConfigs.getByName("homologation")
         }
         release {
+            signingConfig = signingConfigs.findByName("production")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -84,6 +84,10 @@ jobs:
         working-directory: android
         run: python3 scripts/verify_hardening_contracts.py
 
+      - name: Release pipeline contract gate
+        working-directory: android
+        run: python3 scripts/verify_release_pipeline.py
+
       - name: Cache pinned Demucs checkpoint
         uses: actions/cache@v4
         with:
