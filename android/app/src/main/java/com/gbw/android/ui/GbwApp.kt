@@ -1008,13 +1008,22 @@ private fun OnlineSourceCandidateCard(
             Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            if (recommended) {
-                Text(
-                    "Recomendado",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (recommended) {
+                    Text(
+                        "Recomendado",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                } else {
+                    Spacer(Modifier.width(1.dp))
+                }
+                SourceScoreBadge(candidate.score)
             }
             Text(candidate.title, fontWeight = FontWeight.SemiBold)
             Text(
