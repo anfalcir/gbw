@@ -55,6 +55,26 @@ class ForegroundServiceTypePolicyTest {
     }
 
     @Test
+    fun knownForegroundFailuresHaveSpecificFriendlyMessages() {
+        assertEquals(
+            "O Android não encontrou um tipo válido para o serviço em segundo plano.",
+            ForegroundServiceTypePolicy.userFacingFailure(MissingForegroundServiceTypeException("missing")),
+        )
+        assertEquals(
+            "O Android não permitiu iniciar o processamento em segundo plano neste estado.",
+            ForegroundServiceTypePolicy.userFacingFailure(ForegroundServiceStartNotAllowedException("quota")),
+        )
+        assertEquals(
+            "O Android bloqueou o serviço por permissão ou tipo incompatível.",
+            ForegroundServiceTypePolicy.userFacingFailure(SecurityException("permission")),
+        )
+        assertEquals(
+            null,
+            ForegroundServiceTypePolicy.userFacingFailureOrNull(IllegalStateException("other")),
+        )
+    }
+
+    @Test
     fun illegalArgumentHasSpecificFriendlyMessage() {
         assertEquals(
             "O Android rejeitou a configuração do serviço em segundo plano.",
@@ -63,4 +83,6 @@ class ForegroundServiceTypePolicyTest {
     }
 
     private class InvalidForegroundServiceTypeException(message: String) : Exception(message)
+    private class MissingForegroundServiceTypeException(message: String) : Exception(message)
+    private class ForegroundServiceStartNotAllowedException(message: String) : Exception(message)
 }

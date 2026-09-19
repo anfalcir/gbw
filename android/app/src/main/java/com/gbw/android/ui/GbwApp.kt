@@ -64,8 +64,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.gbw.android.BuildConfig
 import com.gbw.android.audio.AudioInspectionDispatcher
+import com.gbw.android.background.ForegroundServiceTypePolicy
 import com.gbw.android.background.JobStore
 import com.gbw.android.background.MediaProcessingService
+import com.gbw.android.background.PersistedJob
 import com.gbw.android.background.SourcePreparationWorker
 import com.gbw.android.background.WorkerExitDiagnostics
 import com.gbw.android.backup.BackupScheduler
@@ -1306,8 +1308,33 @@ private fun SeparationScreen(
                         )
                         resultMessage = SEPARATION_STARTED_MESSAGE
                     } catch (error: Exception) {
-                        jobId?.let { withContext(Dispatchers.IO) { projectLinks.remove(it) } }
-                        resultMessage = error.message ?: "Falha ao iniciar a separação."
+                        val foregroundMessage = ForegroundServiceTypePolicy.userFacingFailureOrNull(error)
+                        val failedJobId = jobId
+                        if (foregroundMessage != null && failedJobId != null) {
+                            withContext(Dispatchers.IO) {
+                                jobStore.save(
+                                    PersistedJob(
+                                        id = failedJobId,
+                                        type = SeparationResultFiles.DEMUCS_TYPE,
+                                        label = "Separação",
+                                        state = "ERROR",
+                                        progress = 0,
+                                        startedAt = System.currentTimeMillis(),
+                                        message = foregroundMessage,
+                                        diagnostic = ForegroundServiceTypePolicy.diagnostic(
+                                            error = error,
+                                            sdkInt = Build.VERSION.SDK_INT,
+                                            requestedType = ForegroundServiceTypePolicy.typeForSdk(Build.VERSION.SDK_INT),
+                                            declaredType = -1,
+                                        ),
+                                    )
+                                )
+                            }
+                        }
+                        failedJobId?.let { withContext(Dispatchers.IO) { projectLinks.remove(it) } }
+                        resultMessage = foregroundMessage
+                            ?: error.message
+                            ?: "Falha ao iniciar a separação."
                     } finally {
                         startingSeparation = false
                     }

@@ -19,7 +19,7 @@ internal object ForegroundServiceTypePolicy {
             else -> "legacy"
         }
 
-    fun userFacingFailure(error: Throwable): String =
+    fun userFacingFailureOrNull(error: Throwable): String? =
         when (error::class.java.simpleName) {
             "InvalidForegroundServiceTypeException" ->
                 "O Android rejeitou o tipo do serviço em segundo plano."
@@ -31,10 +31,13 @@ internal object ForegroundServiceTypePolicy {
                 "O Android bloqueou o serviço por permissão ou tipo incompatível."
             "IllegalArgumentException" ->
                 "O Android rejeitou a configuração do serviço em segundo plano."
-            else ->
-                "Falha ao iniciar o processamento em segundo plano (" +
-                    error::class.java.simpleName + ")."
+            else -> null
         }
+
+    fun userFacingFailure(error: Throwable): String =
+        userFacingFailureOrNull(error)
+            ?: "Falha ao iniciar o processamento em segundo plano (" +
+                error::class.java.simpleName + ")."
 
     fun diagnostic(
         error: Throwable,

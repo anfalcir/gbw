@@ -12,11 +12,17 @@ manifest = read("app/src/main/AndroidManifest.xml")
 jobs = read("app/src/main/java/com/gbw/android/background/JobStore.kt")
 history = read("app/src/main/java/com/gbw/android/background/JobHistoryStore.kt")
 logs = read("app/src/main/java/com/gbw/android/ui/LogsScreen.kt")
+ui = read("app/src/main/java/com/gbw/android/ui/GbwApp.kt")
 
 assert "ServiceCompat.startForeground" not in service
+assert "androidx.core.app.ServiceCompat" not in service
 assert "sdkInt >= Build.VERSION_CODES.Q" in service
 assert "startForeground(" in service
 assert "declaredForegroundServiceType()" in service
+assert "ContextCompat.startForegroundService(" in ui
+assert "MediaProcessingService.demucsIntent" in ui
+assert "ForegroundServiceTypePolicy.userFacingFailureOrNull(error)" in ui
+assert "diagnostic = ForegroundServiceTypePolicy.diagnostic(" in ui
 assert "PackageManager.ComponentInfoFlags.of(0)" in service
 assert "FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING" in policy
 assert "sdkInt >= 35" in policy
