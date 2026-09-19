@@ -729,7 +729,7 @@ private fun SourceScreen(
                 if (selectedCandidate != null) {
                     Text(
                         if (selectedCandidate.automaticDownloadSupported) {
-                            "✓ Fonte ativa: " + selectedCandidate.provider.publicLabel + " — " + selectedCandidate.title
+                            "✓ Fonte selecionada: " + selectedCandidate.provider.publicLabel + " — " + selectedCandidate.title
                         } else {
                             "Fonte de catálogo: " + selectedCandidate.provider.publicLabel +
                                 ". Este resultado serve como referência, mas não oferece aquisição automática."
@@ -803,7 +803,7 @@ private fun SourceScreen(
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text("Preparação da fonte", fontWeight = FontWeight.SemiBold)
-                            Text(job.state + " • " + job.progress + "%")
+                            Text(publicJobState(job.state) + " • " + job.progress + "%")
                             Text(job.message, style = MaterialTheme.typography.bodySmall)
                             if (job.state == "RUNNING") {
                                 OutlinedButton(
@@ -831,7 +831,7 @@ private fun SourceScreen(
                     Divider()
                     Text("Busca ampla", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Se os providers diretos não encontrarem a faixa, abra a pesquisa equivalente em outros serviços.",
+                        "Se a busca automática não encontrar a música, você também pode pesquisar diretamente em outros serviços.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1025,20 +1025,14 @@ private fun OnlineSourceCandidateCard(
             )
             Text(
                 buildString {
-                    append(candidate.quality)
                     if (candidate.durationSeconds > 0) {
-                        append(" • ")
+                        append("Duração ")
                         append(com.gbw.android.domain.SourceSearchRules.durationLabel(candidate.durationSeconds))
+                    } else {
+                        append("Duração não informada")
                     }
-                    append(" • score ")
-                    append(candidate.score)
                 },
                 style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                candidate.reason,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (candidate.previewOnly) {
                 Text(
@@ -1324,7 +1318,7 @@ private fun SeparationScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text("Separação", fontWeight = FontWeight.SemiBold)
-                    Text("${job.state} • ${job.progress}%")
+                    Text(publicJobState(job.state) + " • " + job.progress + "%")
                     Text(job.message)
                     if (job.state == "RUNNING") {
                         OutlinedButton(
@@ -1370,7 +1364,7 @@ private fun SeparationScreen(
                 onExport = { exportPicker.launch(null) },
             )
         } ?: Text(
-            "Nenhum stem gerado para este projeto ainda.",
+            "Nenhuma separação concluída para este projeto.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1394,7 +1388,7 @@ private fun SeparationResultsCard(
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val durationSeconds = result.record.frames / 44_100.0
-            Text("6 stems prontos", fontWeight = FontWeight.SemiBold)
+            Text("6 faixas separadas", fontWeight = FontWeight.SemiBold)
             Text(
                 "Duração ${"%.1f".format(durationSeconds)} s • 44,1 kHz",
                 style = MaterialTheme.typography.bodySmall,
@@ -1422,12 +1416,22 @@ private fun SeparationResultsCard(
             }
 
             Button(onClick = onExport, enabled = !appJobBusy && !exportBusy) {
-                Text(if (exportBusy) "Exportando…" else "Exportar os 6 stems…")
+                Text(if (exportBusy) "Exportando…" else "Exportar faixas separadas…")
             }
 
             exportMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         }
     }
+}
+
+internal fun publicJobState(state: String): String = when (state) {
+    "RUNNING" -> "Em andamento"
+    "CANCELLING" -> "Cancelando"
+    "SUCCESS" -> "Concluído"
+    "CANCELLED" -> "Cancelado"
+    "ERROR" -> "Erro"
+    "INTERRUPTED" -> "Interrompido"
+    else -> state
 }
 
 private fun stemPublicLabel(name: String): String = when (name) {
@@ -1460,7 +1464,7 @@ private fun QualityCard(info: AudioInspection) {
             Text(info.status.label, fontWeight = FontWeight.Bold)
             Text(info.summary())
             info.notes.forEach { Text("• $it") }
-            if (info.status == QualityStatus.CAUTION) Text("O processamento pedirá sua confirmação antes de começar.")
+            if (info.status == QualityStatus.CAUTION) Text("A qualidade desta fonte pode afetar o resultado final.")
         }
     }
 }
@@ -1609,7 +1613,7 @@ private fun SystemScreen() {
                     }
 
                     jobState?.let { job ->
-                        StatusLine("Última tarefa", "${job.state} • ${job.progress}%")
+                        StatusLine("Última tarefa", publicJobState(job.state) + " • " + job.progress + "%")
                         Text(job.message, style = MaterialTheme.typography.bodySmall)
                     }
                     workerExitSummary?.let {

@@ -118,30 +118,6 @@ internal class SourcePreparationWorker(
         }
     }
 
-    override fun onStopped() {
-        val jobId = inputData.getString(KEY_JOB_ID).orEmpty()
-        if (jobId.isNotBlank()) {
-            OnlineSourcePreparer.cancel(jobId)
-            val current = jobs.load()
-            if (current?.id == jobId && current.state in setOf("RUNNING", "CANCELLING")) {
-                jobs.save(
-                    if (current.state == "CANCELLING") {
-                        current.copy(
-                            state = "CANCELLED",
-                            message = "Preparação cancelada.",
-                        )
-                    } else {
-                        current.copy(
-                            state = "INTERRUPTED",
-                            message = "A preparação foi interrompida pelo Android. Tente novamente.",
-                        )
-                    }
-                )
-            }
-        }
-        super.onStopped()
-    }
-
     private fun saveTerminal(jobId: String, state: String, message: String) {
         val current = jobs.load()
         jobs.save(

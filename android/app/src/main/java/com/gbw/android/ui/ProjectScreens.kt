@@ -400,7 +400,7 @@ internal fun ProjectExportScreen(
         }
 
         Text(
-            "Exporte a backing track e a guitarra separadamente, mantendo a música no tom original e os níveis coerentes entre os arquivos.",
+            "Exporte a backing track e a guitarra separadamente, mantendo a música no tom original e com níveis coerentes entre os arquivos.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
@@ -446,12 +446,12 @@ internal fun ProjectExportScreen(
                 }
             },
             enabled = !busy && !startingExport,
-        ) { Text(if (busy || startingExport) "Exportando…" else "Gerar backing + guitar") }
+        ) { Text(if (busy || startingExport) "Exportando…" else "Gerar backing track + guitarra") }
 
         exportJob?.takeIf { it.state == "RUNNING" || it.state == "CANCELLING" }?.let { current ->
             OutlinedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(current.state + " • " + current.progress + "%")
+                    Text(publicJobState(current.state) + " • " + current.progress + "%")
                     Text(current.message)
                     if (current.state == "RUNNING") {
                         OutlinedButton(onClick = {
