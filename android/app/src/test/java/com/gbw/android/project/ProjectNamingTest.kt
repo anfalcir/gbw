@@ -32,4 +32,26 @@ class ProjectNamingTest {
         val two = ProjectManifest.new("x", "Band", "Song", 1000L)
         assertNotEquals(one.projectId, two.projectId)
     }
+
+    @Test fun projectSearchIsCaseAccentAndTermInsensitive() {
+        val project = ProjectManifest.new("x", "Árvore", "Coração Valente", 1000L)
+        assertTrue(projectMatchesSearch(project, "arvore"))
+        assertTrue(projectMatchesSearch(project, "CORACAO arvore"))
+        assertTrue(projectMatchesSearch(project, "valente"))
+        assertEquals(false, projectMatchesSearch(project, "skillet"))
+    }
+
+    @Test fun copySongLabelsStayDistinct() {
+        assertEquals("Enemy (Cópia)", nextProjectCopySong("Enemy", listOf("Enemy")))
+        assertEquals(
+            "Enemy (Cópia 3)",
+            nextProjectCopySong("Enemy", listOf("Enemy", "Enemy (Cópia)", "Enemy (Cópia 2)")),
+        )
+    }
+
+    @Test fun workflowStageLabelsAreUserFacing() {
+        assertEquals("Fonte", projectWorkflowStageLabel("SOURCE"))
+        assertEquals("Separação", projectWorkflowStageLabel("SEPARATION"))
+        assertEquals("Exportação", projectWorkflowStageLabel("EXPORT"))
+    }
 }

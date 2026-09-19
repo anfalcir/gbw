@@ -1,5 +1,6 @@
 package com.gbw.android.project
 
+import java.text.Normalizer
 import java.util.UUID
 
 data class DurableArtifact(
@@ -126,6 +127,42 @@ fun automaticProjectName(artist: String, song: String): String =
     listOf(normalizeProjectText(artist), normalizeProjectText(song))
         .filter { it.isNotBlank() }
         .joinToString(" - ")
+
+fun foldProjectSearchText(value: String): String =
+    Normalizer.normalize(value, Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "")
+        .lowercase()
+        .trim()
+        .replace(Regex("\\s+"), " ")
+
+fun projectMatchesSearch(project: ProjectManifest, query: String): Boolean {
+    val terms = foldProjectSearchText(query).split(' ').filter { it.isNotBlank() }
+    if (terms.isEmpty()) return true
+    val haystack = foldProjectSearchText(
+        listOf(project.artist, project.song, project.name).joinToString(" ")
+    )
+    return terms.all(haystack::contains)
+}
+
+fun nextProjectCopySong(song: String, existingSongs: Collection<String>): String {
+    val base = normalizeProjectText(song).ifBlank { "Projeto" }
+    val occupied = existingSongs.map(::foldProjectSearchText).toSet()
+    var index = 1
+    while (true) {
+        val suffix = if (index == 1) " (Cópia)" else " (Cópia $index)"
+        val candidate = base + suffix
+        if (foldProjectSearchText(candidate) !in occupied) return candidate
+        index += 1
+    }
+}
+
+fun projectWorkflowStageLabel(stage: String): String = when (stage.uppercase()) {
+    "SOURCE" -> "Fonte"
+    "SEPARATION" -> "Separação"
+    "TUNING" -> "Afinação (legado)"
+    "EXPORT" -> "Exportação"
+    else -> stage.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+}
 
 fun sanitizeProjectName(value: String): String {
     val cleaned = value.trim().replace(Regex("[\u0000-\u001f]"), " ").replace(Regex("\\s+"), " ")

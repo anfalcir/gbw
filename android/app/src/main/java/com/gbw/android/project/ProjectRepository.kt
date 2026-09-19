@@ -6,6 +6,9 @@ import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
 import com.gbw.android.backup.BackupDirtyStore
 import com.gbw.android.backup.BackupScheduler
+import com.gbw.android.separation.SeparationResultFiles
+import com.gbw.android.separation.SeparationStem
+import com.gbw.android.separation.StoredSeparationResult
 import com.gbw.android.separation.ValidatedSeparationResult
 import com.gbw.android.source.PreparedSourceRecord
 import java.io.File
@@ -147,11 +150,17 @@ internal class ProjectRepository(context: Context) {
 
     fun duplicate(projectId: String, name: String? = null): ProjectManifest {
         val original = load(projectId)
+        val siblingSongs = list()
+            .filter { foldProjectSearchText(it.artist) == foldProjectSearchText(original.artist) }
+            .map { it.song }
+        val copySong = nextProjectCopySong(original.song, siblingSongs)
         val duplicate = ProjectManifest.new(
             name = name ?: (original.name + " — cópia"),
             artist = original.artist,
-            song = original.song,
-        )
+            song = copySong,
+        ).let { created ->
+            if (name.isNullOrBlank()) created else created.copy(name = sanitizeProjectName(name))
+        }
         withProjectLock(duplicate.projectId) {
             val dst = projectRoot(duplicate.projectId)
             require(dst.mkdirs())
@@ -236,41 +245,57 @@ internal class ProjectRepository(context: Context) {
         song: String = "",
     ): ProjectManifest {
         val project = active() ?: create(name, artist, song)
-        return withProjectLock(project.projectId) {
-            val current = load(project.projectId)
-            val native = File(record.nativePath)
-            val prepared = File(record.preparedPath)
-            require(native.isFile && prepared.isFile) { "Fonte preparada legada não está íntegra." }
-            val nativeExt = native.extension.lowercase().ifBlank { "bin" }
-            val nativeRel = "source/original.$nativeExt"
-            val preparedRel = "source/prepared_44100_f32.wav"
-            copyFileAtomic(native, resolveProjectPath(project.projectId, nativeRel))
-            copyFileAtomic(prepared, resolveProjectPath(project.projectId, preparedRel))
-            val updated = current.copy(
-                name = if (current.name == "Projeto sem nome") sanitizeProjectName(name) else current.name,
-                artist = artist.ifBlank { current.artist },
-                song = song.ifBlank { current.song },
-                workflowStage = "SOURCE",
-                source = ManagedSource(
-                    originalRelativePath = nativeRel,
-                    preparedRelativePath = preparedRel,
-                    sourceUrl = record.sourceUrl,
-                    title = record.title,
-                    formatId = record.formatId,
-                    durationSeconds = record.durationSeconds,
-                ),
-                separation = null,
-                export = null,
-                updatedAtEpochMs = System.currentTimeMillis(),
-            )
-            val durable = updated.copy(
-                inventory = buildInventory(updated, projectRoot(project.projectId)),
-            )
-            saveUnlocked(durable, markDirty = true)
-            cleanupUnreferenced(projectRoot(project.projectId), durable.inventory)
-            setActive(project.projectId)
-            load(project.projectId)
-        }
+        return adoptPreparedSource(
+            projectId = project.projectId,
+            record = record,
+            name = name,
+            artist = artist,
+            song = song,
+            activate = true,
+        )
+    }
+
+    fun adoptPreparedSource(
+        projectId: String,
+        record: PreparedSourceRecord,
+        name: String = "",
+        artist: String = "",
+        song: String = "",
+        activate: Boolean = false,
+    ): ProjectManifest = withProjectLock(projectId) {
+        val current = load(projectId)
+        val native = File(record.nativePath)
+        val prepared = File(record.preparedPath)
+        require(native.isFile && prepared.isFile) { "Fonte preparada legada não está íntegra." }
+        val nativeExt = native.extension.lowercase().ifBlank { "bin" }
+        val nativeRel = "source/original.$nativeExt"
+        val preparedRel = "source/prepared_44100_f32.wav"
+        copyFileAtomic(native, resolveProjectPath(projectId, nativeRel))
+        copyFileAtomic(prepared, resolveProjectPath(projectId, preparedRel))
+        val updated = current.copy(
+            name = if (current.name == "Projeto sem nome" && name.isNotBlank()) sanitizeProjectName(name) else current.name,
+            artist = artist.ifBlank { current.artist },
+            song = song.ifBlank { current.song },
+            workflowStage = "SOURCE",
+            source = ManagedSource(
+                originalRelativePath = nativeRel,
+                preparedRelativePath = preparedRel,
+                sourceUrl = record.sourceUrl,
+                title = record.title,
+                formatId = record.formatId,
+                durationSeconds = record.durationSeconds,
+            ),
+            separation = null,
+            export = null,
+            updatedAtEpochMs = System.currentTimeMillis(),
+        )
+        val durable = updated.copy(
+            inventory = buildInventory(updated, projectRoot(projectId)),
+        )
+        saveUnlocked(durable, markDirty = true)
+        cleanupUnreferenced(projectRoot(projectId), durable.inventory)
+        if (activate) setActive(projectId)
+        load(projectId)
     }
 
     fun publishSeparation(projectId: String, result: ValidatedSeparationResult): ProjectManifest =
@@ -309,7 +334,6 @@ internal class ProjectRepository(context: Context) {
                 )
                 saveUnlocked(durable, markDirty = true)
                 cleanupUnreferenced(projectRoot(projectId), durable.inventory)
-                setActive(projectId)
                 load(projectId)
             } finally {
                 staging.deleteRecursively()
@@ -345,7 +369,6 @@ internal class ProjectRepository(context: Context) {
         )
         saveUnlocked(durable, markDirty = true)
         cleanupUnreferenced(projectRoot(projectId), durable.inventory)
-        setActive(projectId)
         load(projectId)
     }
 
@@ -364,6 +387,32 @@ internal class ProjectRepository(context: Context) {
         val file = resolveProjectPath(projectId, relative)
         if (!file.isFile) return null
         return FileProvider.getUriForFile(appContext, appContext.packageName + ".files", file)
+    }
+
+    fun projectSeparationResult(projectId: String): ValidatedSeparationResult? {
+        val state = load(projectId).separation ?: return null
+        if (state.stems.keys != SeparationResultFiles.stemNames.toSet()) return null
+        val stems = SeparationResultFiles.stemNames.map { name ->
+            val relative = state.stems[name] ?: return null
+            val file = resolveProjectPath(projectId, relative)
+            if (!file.isFile || file.length() <= 44L) return null
+            SeparationStem(name, file)
+        }
+        val record = StoredSeparationResult(
+            jobId = state.jobId,
+            type = SeparationResultFiles.DEMUCS_TYPE,
+            completedAt = state.completedAtEpochMs,
+            frames = state.frames,
+            elapsedMillis = state.elapsedMillis,
+            peakPssKb = 0L,
+            runtimeIdentity = state.runtimeIdentity,
+            blasThreads = state.blasThreads,
+        )
+        return ValidatedSeparationResult(
+            record = record,
+            stems = stems,
+            totalBytes = stems.sumOf { it.file.length() },
+        )
     }
 
     fun resolveProjectPath(projectId: String, relativePath: String): File {
