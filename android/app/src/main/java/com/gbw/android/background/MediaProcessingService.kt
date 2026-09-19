@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import com.gbw.android.MainActivity
 import com.gbw.android.R
@@ -365,23 +366,34 @@ class MediaProcessingService : Service() {
     }
 
     private fun startAsForeground(notification: Notification) {
-        val sdkInt = Build.VERSION.SDK_INT
-        if (sdkInt >= Build.VERSION_CODES.Q) {
-            // Android 15+ added mediaProcessing after the current ServiceCompat
-            // type allow-list. Calling the platform API avoids compatibility-layer
-            // masking while preserving the exact manifest-declared type.
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ForegroundServiceTypePolicy.typeForSdk(sdkInt),
-            )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startTypedForeground(notification)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
     }
 
-    @Suppress("DEPRECATION")
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun startTypedForeground(notification: Notification) {
+        // mediaProcessing was added after the current ServiceCompat type allow-list.
+        // Use the platform API so the Android 15+ type reaches the framework unchanged.
+        startForeground(
+            NOTIFICATION_ID,
+            notification,
+            ForegroundServiceTypePolicy.typeForSdk(Build.VERSION.SDK_INT),
+        )
+    }
+
     private fun declaredForegroundServiceType(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            declaredForegroundServiceTypeApi29()
+        } else {
+            0
+        }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    @Suppress("DEPRECATION")
+    private fun declaredForegroundServiceTypeApi29(): Int =
         runCatching {
             val component = ComponentName(this, MediaProcessingService::class.java)
             if (Build.VERSION.SDK_INT >= 33) {
