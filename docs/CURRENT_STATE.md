@@ -1,111 +1,81 @@
 # GBW — Estado Atual
 
-**Data:** 2026-09-18  
-**Branch ativa:** `dev/android-6.0`  
-**Baseline Linux:** GBW Linux 5.23.0, congelado e somente leitura  
-**Roadmap autoritativo:** `docs/ANDROID_MIGRATION_PLAN.md`
+**Data:** 2026-09-19  
+**Branch:** dev/android-6.0  
+**Baseline Linux:** 5.23.0 congelado / somente leitura  
+**Roadmap:** docs/ANDROID_MIGRATION_PLAN.md
 
-## Checkpoint homologado
+## Candidato atual
 
-- versão: `6.0.0-alpha12`;
-- versionCode: `17`;
-- commit: `9631fd165c457adeb103912633e2cc59d3adb32e`;
-- Android CI #108: **SUCCESS**;
-- APK SHA-256: `cded2ef6bb8ea02c329434c5d58550c9c4cfd9b3b18c8b42cb4bf5f1dff76ae7`.
+- versão: 6.0.0-rc2
+- versionCode: 23
+- commit: d49a84ad00eaa21328a2742ae0be5caca815d3bd
+- Android CI #119 / run 35439632899: SUCCESS
+- APK de homologação: app-debug.apk
+- APK bytes: 65,872,133
+- APK SHA-256: eb1cfd6b3316a53a8399e69e3df4a141229adeaacd3366bd4f78fac7812cf21c
+- certificado de homologação SHA-256: 6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0
+- artifact: GBW-Android-debug-119
 
-## Homologação física alpha12
+## Gates fechados
 
-Backup Android/Google Drive aprovado no cenário principal:
-- backup automático executou sozinho;
-- estrutura foi criada automaticamente;
-- projeto foi organizado por banda/música;
-- categorias ficaram separadas e legíveis;
-- sincronização funcionou corretamente.
+- R1 / Alpha13: project scoping, sessão e Projetos.
+- R2 / Alpha14: produto original-only e remoção física do stack de alteração de tom.
+- R3 / Alpha15: Logs, Sistema e UX de release.
+- R4 / Alpha16: hardening digital, stress lógico, storage preflight e contratos de lifecycle/backup.
+- RC1: pipeline de produção separado e fail-closed.
+- RC2: preflight também para incorporação de fonte local/preparada.
 
-Vídeo `132674.mp4` revelou pequenos problemas de sessão/UX:
-- banda/música duplicada no card;
-- mensagem “Projeto fechado” permanece após reabrir;
-- stems permanecem visíveis sem projeto aberto;
-- parte do diagnóstico ainda está técnica demais.
+## Invariantes finais do produto
 
-Esses pontos formam o próximo gate **R1 / alpha13**.
+- Android-first.
+- Demucs-only: htdemucs_6s.
+- seis stems: drums, bass, other, vocals, guitar, piano.
+- OpenBLAS default 1 thread; política 1/2.
+- original-only: sem detecção/alteração de tom e sem runtime antigo.
+- export: backing + guitar com shared gain.
+- projectId UUID imutável.
+- backup SAF/Google Drive Android v2.
+- Linux 5.23 permanece congelado e não é formato de projeto/backup do Android.
 
-## Decisões de produto de 2026-09-18
+## O que falta para 100%
 
-### Android-first backup
+### R5 — produção
 
-Não é mais requisito:
-- backup Linux → Android;
-- backup Android → Linux;
-- projeto cross-platform;
-- round-trip de manifests entre plataformas.
+Ainda aberto:
+1. provisionar chave privada de produção;
+2. cadastrar os cinco GitHub Actions secrets;
+3. escolher/registrar LICENSE do projeto compatível com a distribuição;
+4. resolver explicitamente o licenciamento do checkpoint htdemucs_6s;
+5. executar Android Production Release e registrar APK/fingerprint/SHA de produção.
 
-O backup SAF/Google Drive v2 Android é o sistema oficial do produto móvel.
+Infraestrutura pronta:
+- .github/workflows/android-release.yml
+- android/scripts/prepare_production_signing.sh
+- docs/ANDROID_PRODUCTION_SIGNING.md
+- docs/ANDROID_THIRD_PARTY.md
 
-### Original-only
+### R6 — homologação física
 
-O GBW Android passa a trabalhar sempre no tom original da fonte.
+Ainda exige hardware/percepção humana:
+- instalação/upgrade;
+- background/lock screen;
+- temperatura/RAM/bateria no Demucs;
+- escuta dos seis stems e export;
+- Google Drive real, offline/online, conflito e restore;
+- ergonomia, orientação, font scale e TalkBack;
+- cancelamento prolongado.
 
-Devem ser removidos:
-- Afinação & Pitch;
-- detecção de afinação;
-- pitch por tuning/semitons;
-- Pitch de Arquivo;
-- Rubber Band R3;
-- export pitched/ajustado;
-- formant preservation ligada a pitch.
+Checklist: docs/ANDROID_FINAL_VALIDATION.md
 
-A pedaleira externa é responsável por qualquer pitch necessário durante o uso musical.
+### R7
 
-### Separação
+Somente depois de R5 + R6:
+- elevar para 6.0.0;
+- gerar APK final de produção;
+- consolidar relatório final;
+- merge dev/android-6.0 → main.
 
-Permanece exclusivamente:
-- Demucs `htdemucs_6s`;
-- seis stems;
-- OpenBLAS default 1 thread, política interna 1/2.
+## Regra
 
-BS-RoFormer/Alta Qualidade/Comparar permanecem fora do produto.
-
-## Workflow final alvo
-
-1. Fonte
-2. Separação
-3. Exportação
-
-Gerenciamento:
-- Projetos
-- Logs
-
-Aplicativo:
-- Configurações
-- Sistema
-
-## Próximo gate
-
-**R1 — Alpha13: Session & Workflow UX Hardening**
-
-Prioridades:
-1. state scoping estrito por `projectId`;
-2. fechar projeto elimina source/stems/export visuais;
-3. corrigir card Projetos;
-4. eliminar mensagem stale;
-5. completar pesquisa/agrupamento de Projetos;
-6. preparar o fluxo para a remoção total de pitch em R2.
-
-Depois:
-- R2 original-only simplification;
-- R3 Logs/UX final;
-- R4 hardening;
-- R5 RC;
-- R6 homologação física final;
-- R7 6.0.0.
-
-## Invariantes atuais
-
-- `linux/` permanece intacto;
-- UUID de projeto é imutável;
-- backup remoto não abre projeto;
-- source/stems/export devem pertencer ao projeto ativo;
-- backup mantém somente o estado atual;
-- shared gain continua obrigatório no export original;
-- tarefas pesadas não pertencem à Activity.
+Não declarar 100% antes de R1–R6 estarem fechados. Não usar a chave pública de homologação em produção.

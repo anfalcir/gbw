@@ -1,5 +1,20 @@
 # GBW Android 6.0 — Roadmap Mestre e Source of Truth
 
+## Status executivo — 2026-09-19
+
+- R1 ✅ fechado — Alpha13.
+- R2 ✅ fechado — Alpha14.
+- R3 ✅ fechado — Alpha15.
+- R4 ✅ fechado — Alpha16 / hardening digital.
+- Candidato atual: 6.0.0-rc2 / versionCode 23 / commit d49a84ad00eaa21328a2742ae0be5caca815d3bd.
+- Android CI #119 / run 35439632899: SUCCESS.
+- APK homologação SHA-256: eb1cfd6b3316a53a8399e69e3df4a141229adeaacd3366bd4f78fac7812cf21c.
+- R5 ⏳ infraestrutura pronta; bloqueado por assinatura privada + compliance/licença.
+- R6 ⏳ campanha física obrigatória.
+- R7 ⏳ somente após R5 + R6.
+
+
+
 **Status:** fonte de verdade autoritativa para a conclusão do GBW Android 6.0  
 **Baseline de referência:** GBW Linux 5.23.0, congelado em `linux/` e somente leitura  
 **Branch de desenvolvimento:** `dev/android-6.0`  

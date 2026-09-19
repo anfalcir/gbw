@@ -1,44 +1,50 @@
-# GBW Android — Assinatura de Homologação
+# GBW Android — Assinatura
 
-## Objetivo
+## Homologação
 
-Os APKs de desenvolvimento/homologação precisam aceitar atualização por cima entre execuções diferentes da CI.
+Builds debug de homologação usam identidade estável para permitir upgrade entre candidatos.
 
-O Android exige que versões sucessivas do mesmo `applicationId` sejam assinadas pelo mesmo certificado. O keystore debug padrão do Android é criado localmente/por runner e, em CI efêmera, muda entre execuções. Isso impediu a atualização do alpha8 para o primeiro alpha9.
+Perfil:
+- app/gbw-homologation.p12;
+- alias gbw-homologation;
+- PKCS12;
+- certificado SHA-256 6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0;
+- uso exclusivo: desenvolvimento/homologação.
 
-## Perfil estável
+A chave é intencionalmente pública no repositório e não oferece identidade segura para distribuição.
 
-A partir de `6.0.0-alpha9.1`, builds `debug` da CI usam:
+## Produção
 
-- arquivo: `app/gbw-homologation.p12`;
-- alias: `gbw-homologation`;
-- tipo: PKCS12;
-- certificado SHA-256: `6d60524d7817a0ef907f70922d30f129325282451049accfd221222b60ef6dd0`;
-- uso: **somente homologação/desenvolvimento**.
+Build type release possui configuração separada e só recebe signingConfig production quando todas as variáveis de ambiente de release estão presentes.
 
-Essa chave é intencionalmente pública no repositório e **não possui valor de segurança para distribuição de produção**. Seu propósito é apenas dar identidade estável aos APKs de teste para permitir `install -r`/atualização normal.
+Workflow:
+.github/workflows/android-release.yml
 
-## Regra para produção
+Secrets necessários:
+- GBW_RELEASE_KEYSTORE_B64;
+- GBW_RELEASE_STORE_PASSWORD;
+- GBW_RELEASE_KEY_ALIAS;
+- GBW_RELEASE_KEY_PASSWORD;
+- GBW_RELEASE_CERT_SHA256.
 
-O APK/Bundle de release público **não deve** usar esta chave.
+O keystore:
+- é materializado apenas no runner;
+- recebe chmod restritivo;
+- não é commitado;
+- não aparece em artifacts;
+- deve ser preservado pelo proprietário fora do GitHub como backup seguro.
 
-Antes do RC:
+O workflow verifica que o certificado real do APK:
+- coincide com GBW_RELEASE_CERT_SHA256;
+- é diferente do fingerprint público de homologação.
 
-1. criar chave de produção privada;
-2. armazená-la fora do repositório, via secret/keystore seguro;
-3. configurar build type de release separado;
-4. documentar fingerprint de produção;
-5. nunca publicar o private key de produção.
+## Bloqueios
 
-## Migração one-time
+R5 não fecha até existir:
+- identidade privada de produção provisionada;
+- fingerprint registrado;
+- compliance de distribuição resolvido conforme docs/ANDROID_THIRD_PARTY.md.
 
-APKs alpha8 e alpha9 inicial foram assinados por debug keys efêmeras diferentes. Como o private key do alpha8 não foi preservado, não existe forma segura de assinar um novo APK que atualize aquele alpha8.
+## Cadeia antiga
 
-Portanto, para entrar na cadeia estável de homologação:
-
-1. exportar qualquer stem/dado que precise ser preservado no alpha8;
-2. desinstalar o alpha8;
-3. instalar `6.0.0-alpha9.1`;
-4. a partir daí, APKs de homologação futuros com o mesmo certificado poderão atualizar por cima.
-
-A CI falha se o APK final não estiver assinado com o fingerprint fixado acima.
+Builds alpha8/alpha9 inicial usaram debug keys efêmeras e não podem ser atualizados com a identidade estável atual sem reinstalação. A cadeia estável de homologação passa a usar o fingerprint acima.

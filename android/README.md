@@ -1,68 +1,61 @@
-# GBW Android 6.x
+# GBW Android 6.0
 
 Aplicativo Android nativo do Guitar Backing Wizard.
 
-O produto final 6.0 é **Android-first** e **original-only**.
+Produto: **Android-first, Demucs-only e original-only**.
 
-## Workflow alvo
+## Workflow
 
 1. Fonte
-2. Separação Demucs
-3. Exportação original
+2. Separação
+3. Exportação
 
-Gerenciamento:
-- Projetos
-- Logs
-
-Backup:
-- SAF / Google Drive;
-- automático e manual;
-- restore Android;
-- organização por `Artista - Música`.
+Gerenciamento: Projetos e Logs.  
+Aplicativo: Configurações e Sistema.
 
 ## Separação
 
-Somente Demucs `htdemucs_6s`.
-
-Contrato:
+- Demucs htdemucs_6s;
 - seis stems: drums, bass, other, vocals, guitar, piano;
-- float32 estéreo / 44,1 kHz no runtime do modelo;
-- um chunk por vez;
-- OpenBLAS default 1 thread;
-- política interna 1/2;
-- arm64-v8a.
-
-Benchmark físico já confirmou 1 thread como configuração preferida no Samsung Galaxy Tab A11+.
+- float32 estéreo / 44,1 kHz no runtime;
+- arm64-v8a;
+- OpenBLAS default 1 thread; política 1/2;
+- processamento pesado no processo :media;
+- cancelamento/cleanup e preflight de storage.
 
 ## Export
 
-Produto final:
 - backing = drums + bass + other + vocals + piano;
 - guitar separada;
 - shared gain comum;
-- tom original da fonte.
+- FLAC 24, WAV 24 e WAV float32;
+- sempre no tom original da fonte.
 
-Não haverá export pitched no produto final.
+Não existem no Android 6.0: detecção/alteração de tom, ferramenta de alteração de arquivo, Rubber Band, BS-RoFormer ou export ajustado.
 
-## Decisões removidas do escopo
+## Projetos e backup
 
-O código alpha12 ainda contém partes históricas que serão removidas no gate R2:
-- Afinação & Pitch;
-- Pitch de Arquivo;
-- Rubber Band R3;
-- export ajustado/pitched.
+- UUID imutável;
+- sessão isolada por projectId;
+- SAF / Google Drive;
+- backup automático/manual;
+- restore Android;
+- dedupe/hash e conflito explícito.
 
 Não existe requisito de projeto/backup cross-platform com Linux.
 
-## Checkpoint
+## Candidato atual
 
-`6.0.0-alpha12` / versionCode 17
+6.0.0-rc2 / versionCode 23
 
-- commit: `9631fd165c457adeb103912633e2cc59d3adb32e`;
-- CI #108: SUCCESS;
-- APK SHA-256: `cded2ef6bb8ea02c329434c5d58550c9c4cfd9b3b18c8b42cb4bf5f1dff76ae7`.
+- commit d49a84ad00eaa21328a2742ae0be5caca815d3bd;
+- Android CI #119: SUCCESS;
+- APK SHA-256 eb1cfd6b3316a53a8399e69e3df4a141229adeaacd3366bd4f78fac7812cf21c;
+- assinatura: homologation-public-test-key.
 
-## Roadmap
+Produção usa workflow separado e exige private key + compliance de distribuição.
 
-A fonte de verdade é:
-`docs/ANDROID_MIGRATION_PLAN.md`.
+Source of truth: docs/ANDROID_MIGRATION_PLAN.md  
+Estado: docs/CURRENT_STATE.md  
+Compliance: docs/ANDROID_THIRD_PARTY.md  
+Homologação física: docs/ANDROID_FINAL_VALIDATION.md

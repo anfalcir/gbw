@@ -1,49 +1,67 @@
 # GBW Export Contract
 
 Producer: GBW
-Schema version: 1
+Schema version: 2
 
-## Final product
-The final product is a pair: backing + guitar.
-Backing contains exactly drums + bass + other + vocals + piano.
-Guitar is never mixed into backing.
+## Produto final
+
+Cada exportação contém exatamente dois arquivos de áudio:
+- backing = drums + bass + other + vocals + piano;
+- guitar = stem de guitarra separado.
+
+O Android 6.0 é original-only. Não existe variante ajustada, alteração de tom, semitons ou processamento de formantes.
 
 ## Shared gain
-The Android renderer preserves the Linux 5.23 render_pair semantics:
-1. mix the five backing stems in float32;
-2. recombine backing + guitar;
-3. measure the recombined peak;
-4. use -1 dBFS as the safety target;
-5. calculate one gain factor;
-6. apply that exact same factor to backing and guitar.
 
-Backing and guitar are never independently normalized. Their musical level relationship is therefore preserved when both are imported at 0 dB.
+O renderer:
+1. mistura os cinco stems de backing em float32;
+2. avalia o pico combinado backing + guitar;
+3. usa -1 dBFS como teto de segurança;
+4. calcula um único fator de ganho;
+5. aplica exatamente o mesmo fator ao backing e à guitar.
 
-## Pitch
-For the pitched variant:
-- drums remains unchanged;
-- guitar, bass, other and piano receive pitch;
-- vocals receive pitch with the vocalFormants policy;
-- Rubber Band R3 is used;
-- the final stem is normalized to the exact original frame count after the R3 duration-tolerance gate.
+Backing e guitar nunca são normalizados independentemente. A relação de nível entre os dois arquivos é preservada.
 
-If pitch is zero and the original pair is requested, GBW does not create a redundant pitched copy.
+## Contrato de áudio
 
-## Audio contract
-Workflow sample rate: 44.1 kHz stereo.
-Formats: WAV float32, WAV 24-bit, FLAC 24-bit.
-Backing and guitar in one variant have identical sample rate, channel count and frame alignment.
+- sample rate: 44,1 kHz;
+- canais: estéreo;
+- alinhamento: backing e guitar têm o mesmo número de frames;
+- formatos: WAV float32, WAV 24-bit, FLAC 24-bit.
 
-## Layout
-exports/<exportId>/original/backing.<ext>
-exports/<exportId>/original/guitar.<ext>
-exports/<exportId>/pitch_+Nst/backing.<ext>
-exports/<exportId>/pitch_+Nst/guitar.<ext>
-exports/<exportId>/export_manifest.json
+## Layout local
 
-Filenames are convenience only. Consumers should use manifest roles.
+exports/<exportId>/
+  backing.<ext>
+  guitar.<ext>
+  export_manifest.json
+
+O exportId é identidade interna da publicação. No backup remoto humano, o exportId não precisa aparecer na navegação.
 
 ## Manifest
-export_manifest.json records producer/schema, GBW projectId, artist/song, exportId/revision, target peak, shared-gain policy, variant, pitch semitones, role, relativePath, format, sampleRate, channels, durationFrames, size and SHA-256.
 
-This file contract is the future interoperability boundary for GuitarLab. There is no bidirectional code dependency between the applications.
+export_manifest.json registra:
+- schemaVersion 2;
+- producer;
+- projectId;
+- artist;
+- song;
+- exportId;
+- revision;
+- targetPeakDbfs;
+- sharedGainPolicy;
+- sharedGainDb;
+- artifacts com role, relativePath, format, sampleRate, channels, durationFrames, size e SHA-256.
+
+Roles válidos do par final:
+- backing;
+- guitar.
+
+## Invariantes
+
+- guitar nunca é misturada no backing;
+- shared gain é comum aos dois arquivos;
+- nenhum artifact de estado anterior é mantido como export atual;
+- falha/cancelamento não publica staging parcial;
+- projetos schema v1 podem ser lidos para migração, mas export legado incompatível é invalidado;
+- o writer atual produz somente schema v2 original-only.

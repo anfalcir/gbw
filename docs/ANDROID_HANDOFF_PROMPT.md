@@ -1,79 +1,62 @@
 # Handoff — GBW Android 6.0
 
-Repo: `anfalcir/gbw`  
-Branch ativa: `dev/android-6.0`  
-Baseline Linux: `linux/` = GBW Linux 5.23.0, somente leitura.
+Repo: anfalcir/gbw
+Branch: dev/android-6.0
+Linux baseline: linux/ = 5.23.0 congelado e somente leitura.
 
 ## Leia primeiro
 
-1. `docs/ANDROID_MIGRATION_PLAN.md` — source of truth;
-2. `docs/CURRENT_STATE.md`;
-3. `docs/PARITY_MATRIX.md`;
-4. `docs/DEVELOPMENT_WORKFLOW.md`;
-5. confirmar HEAD remoto e CI recentes.
+1. docs/ANDROID_MIGRATION_PLAN.md;
+2. docs/CURRENT_STATE.md;
+3. docs/PARITY_MATRIX.md;
+4. docs/ANDROID_HARDENING_MATRIX.md;
+5. docs/ANDROID_THIRD_PARTY.md;
+6. confirmar HEAD/CI reais.
 
-## Escopo final consolidado
+## Produto final
 
-Fluxo Android:
+Fonte → Separação Demucs → Export original backing+guitar → Projeto/Backup Android
 
-`Fonte → Separação Demucs → Export original backing+guitar → Projeto/Backup Android`
-
-### NÃO implementar/reintroduzir
-
-- Afinação & Pitch;
-- detecção de afinação;
-- Pitch de Arquivo;
+Não reintroduzir:
+- afinação/detecção;
+- alteração de tom;
+- ferramenta de alteração de arquivo;
 - Rubber Band;
-- export pitched;
+- export ajustado;
 - BS-RoFormer;
 - Alta Qualidade/Comparar;
-- interoperabilidade de projeto/backup Linux↔Android.
+- interoperabilidade Linux↔Android de projeto/backup.
 
-Esses itens são decisões de produto, não pendências.
+## Gates concluídos digitalmente
 
-## Backup
+- R1 Alpha13: sessão/project scoping e Projetos;
+- R2 Alpha14: original-only e remoção física do stack antigo;
+- R3 Alpha15: Logs + UX de release;
+- R4 Alpha16: hardening digital/stress/preflight.
 
-Sistema oficial:
-- Android SAF;
-- Google Drive quando escolhido pelo usuário;
-- backup automático/manual;
-- UUID interno;
-- pastas humanas `Artista - Música`;
-- restore Android;
-- dedupe/hash;
-- conflitos explícitos.
+Alpha16 de referência:
+- commit c05068622d8e936cfdc5cbd139da296b7e9fc61e;
+- CI #117 SUCCESS;
+- APK SHA-256 8468b9ab6750cab9649425679a10ecf9e5e6f333d096dfa9d7c829ebc033af46.
 
-A homologação alpha12 confirmou funcionamento real do backup automático e da organização no Drive.
+## RC2
 
-## Checkpoint
+O candidato atual é 6.0.0-rc2 / versionCode 23 e ganhou pipeline separado de produção.
 
-- `6.0.0-alpha12`;
-- versionCode 17;
-- commit `9631fd165c457adeb103912633e2cc59d3adb32e`;
-- CI #108 SUCCESS;
-- APK SHA-256 `cded2ef6bb8ea02c329434c5d58550c9c4cfd9b3b18c8b42cb4bf5f1dff76ae7`.
+R5 permanece aberto enquanto faltar qualquer um:
+- private key de produção;
+- LICENSE do projeto;
+- fechamento da auditoria do checkpoint Demucs;
+- APK release assinado e verificado.
 
-## Próximo trabalho
+R6 é a campanha física única definida em docs/ANDROID_FINAL_VALIDATION.md.
 
-R1 / alpha13:
-- corrigir vazamento de stems ao fechar projeto;
-- eliminar mensagem stale de fechamento;
-- remover duplicação do nome do projeto;
-- state scoping por projectId;
-- melhorar Projetos;
-- estados vazios/CTAs;
-- workflow coerente entre sessões.
+R7 somente após R5 + R6.
 
-R2:
-- remover integralmente pitch/tuning/Rubber Band e export ajustado.
+## Regra
 
-Depois seguir R3–R7 do roadmap até 6.0.0.
-
-## Regra de execução
-
-Antes de escrever:
-- confirmar HEAD;
-- não tocar `linux/`;
-- preservar Demucs-only;
-- acompanhar Android CI após commits;
-- nunca enfraquecer gates para obter verde.
+- não tocar linux/app;
+- não enfraquecer CI;
+- ler logs reais em qualquer falha;
+- não confundir APK de homologação com release de produção;
+- não declarar 100% antes de R1–R6 estarem fechados.
